@@ -131,6 +131,8 @@ enum Opt {
         name: String,
         #[arg(help = "Username for the password entry")]
         user: Option<String>,
+        #[arg(long, help = "Open a full login editor")]
+        full: bool,
         #[arg(
             long,
             help = "URI for the password entry",
@@ -207,6 +209,8 @@ enum Opt {
             as a note."
     )]
     Edit {
+        #[arg(long, help = "Open a full login editor")]
+        full: bool,
         #[command(flatten)]
         find_args: FindArgs,
     },
@@ -383,11 +387,13 @@ fn main() {
         Opt::Add {
             name,
             user,
+            full,
             uri,
             folder,
         } => commands::add(
             &name,
             user.as_deref(),
+            full,
             &uri.iter()
                 // XXX not sure what the ui for specifying the match type
                 // should be
@@ -430,10 +436,11 @@ fn main() {
                 ty,
             )
         }
-        Opt::Edit { find_args } => commands::edit(
+        Opt::Edit { full, find_args } => commands::edit(
             find_args.needle,
             find_args.user.as_deref(),
             find_args.folder.as_deref(),
+            full,
             find_args.ignorecase,
         ),
         Opt::Remove { find_args } => commands::remove(

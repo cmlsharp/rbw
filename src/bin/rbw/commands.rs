@@ -6,8 +6,7 @@ use anyhow::Context as _;
 // code lasts for before a new one must be generated
 const TOTP_DEFAULT_STEP: u64 = 30;
 
-const MISSING_CONFIG_HELP: &str =
-    "Before using rbw, you must configure the email address you would like to \
+const MISSING_CONFIG_HELP: &str = "Before using rbw, you must configure the email address you would like to \
     use to log in to the server by running:\n\n    \
         rbw config set email <email>\n\n\
     Additionally, if you are using a self-hosted installation, you should \
@@ -1227,6 +1226,81 @@ const HELP_NOTES: &str = r"
 # Lines with leading # will be ignored.
 ";
 
+const HELP_FULL: &str = r"
+# Edit the login fields below as YAML.
+# Leave a field blank to clear it.
+";
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LoginState {
+    username: Option<String>,
+    password: Option<String>,
+    totp: Option<String>,
+    uris: Vec<rbw::db::Uri>,
+    notes: Option<String>,
+}
+
+impl LoginState {
+    fn encrypt(
+        &self,
+        org_id: Option<&str>,
+    ) -> anyhow::Result<rbw::db::EntryData> {
+        let username =
+            encrypt_optional_string(self.username.as_deref(), org_id)?;
+        let password =
+            encrypt_optional_string(self.password.as_deref(), org_id)?;
+        let totp = encrypt_optional_string(self.totp.as_deref(), org_id)?;
+        let uris = self
+            .uris
+            .iter()
+            .map(|uri| {
+                Ok(rbw::db::Uri {
+                    uri: crate::actions::encrypt(&uri.uri, org_id)?,
+                    match_type: uri.match_type,
+                })
+            })
+            .collect::<anyhow::Result<Vec<_>>>()?;
+
+        Ok(rbw::db::EntryData::Login {
+            username,
+            password,
+            totp,
+            uris,
+        })
+    }
+
+    fn edit_legacy(mut self) -> anyhow::Result<LoginState> {
+        let mut contents =
+            format!("{}\n", self.password.as_deref().unwrap_or(""));
+        if let Some(notes) = self.notes.as_deref() {
+            write!(contents, "\n{notes}\n").unwrap();
+        }
+
+        let contents = rbw::edit::edit(&contents, HELP_PW)?;
+        let (password, notes) = parse_editor(&contents);
+        self.password = password;
+        self.notes = notes;
+        Ok(self)
+    }
+
+    fn edit_full(self) -> anyhow::Result<Self> {
+        let contents =
+            rbw::edit::edit(&yaml_serde::to_string(&self)?, HELP_FULL)?;
+        yaml_serde::from_str(&contents)
+            .context("failed to parse full login editor contents")
+    }
+}
+
+fn encrypt_optional_string(
+    value: Option<&str>,
+    org_id: Option<&str>,
+) -> anyhow::Result<Option<String>> {
+    value
+        .map(|value| crate::actions::encrypt(value, org_id))
+        .transpose()
+}
+
 pub fn config_show() -> anyhow::Result<()> {
     let config = rbw::config::Config::load()?;
     serde_json::to_writer_pretty(std::io::stdout(), &config)
@@ -1558,6 +1632,7 @@ pub fn code(
 pub fn add(
     name: &str,
     username: Option<&str>,
+    full: bool,
     uris: &[(String, Option<rbw::api::UriMatchType>)],
     folder: Option<&str>,
 ) -> anyhow::Result<()> {
@@ -1570,29 +1645,26 @@ pub fn add(
     let refresh_token = db.refresh_token.as_ref().unwrap();
 
     let name = crate::actions::encrypt(name, None)?;
-
-    let username = username
-        .map(|username| crate::actions::encrypt(username, None))
-        .transpose()?;
-
-    let contents = rbw::edit::edit("", HELP_PW)?;
-
-    let (password, notes) = parse_editor(&contents);
-    let password = password
-        .map(|password| crate::actions::encrypt(&password, None))
-        .transpose()?;
-    let notes = notes
-        .map(|notes| crate::actions::encrypt(&notes, None))
-        .transpose()?;
-    let uris: Vec<_> = uris
-        .iter()
-        .map(|uri| {
-            Ok(rbw::db::Uri {
-                uri: crate::actions::encrypt(&uri.0, None)?,
-                match_type: uri.1,
+    let login = LoginState {
+        username: username.map(std::string::ToString::to_string),
+        password: None,
+        totp: None,
+        uris: uris
+            .iter()
+            .map(|(uri, match_type)| rbw::db::Uri {
+                uri: uri.clone(),
+                match_type: *match_type,
             })
-        })
-        .collect::<anyhow::Result<_>>()?;
+            .collect(),
+        notes: None,
+    };
+    let login = if full {
+        login.edit_full()
+    } else {
+        login.edit_legacy()
+    }?;
+    let notes = encrypt_optional_string(login.notes.as_deref(), None)?;
+    let data = login.encrypt(None)?;
 
     let mut folder_id = None;
     if let Some(folder_name) = folder {
@@ -1636,12 +1708,7 @@ pub fn add(
         &access_token,
         refresh_token,
         &name,
-        &rbw::db::EntryData::Login {
-            username,
-            password,
-            uris,
-            totp: None,
-        },
+        &data,
         notes.as_deref(),
         folder_id.as_deref(),
     )? {
@@ -1754,6 +1821,7 @@ pub fn edit(
     name: Needle,
     username: Option<&str>,
     folder: Option<&str>,
+    full: bool,
     ignore_case: bool,
 ) -> anyhow::Result<()> {
     unlock()?;
@@ -1773,41 +1841,45 @@ pub fn edit(
             .with_context(|| format!("couldn't find entry for '{desc}'"))?;
 
     let (data, fields, notes, history) = match &decrypted.data {
-        DecryptedData::Login { password, .. } => {
-            let mut contents =
-                format!("{}\n", password.as_deref().unwrap_or(""));
-            if let Some(notes) = decrypted.notes {
-                write!(contents, "\n{notes}\n").unwrap();
-            }
-
-            let contents = rbw::edit::edit(&contents, HELP_PW)?;
-
-            let (password, notes) = parse_editor(&contents);
-            let password = password
-                .map(|password| {
-                    crate::actions::encrypt(
-                        &password,
-                        entry.org_id.as_deref(),
-                    )
-                })
-                .transpose()?;
-            let notes = notes
-                .map(|notes| {
-                    crate::actions::encrypt(&notes, entry.org_id.as_deref())
-                })
-                .transpose()?;
+        DecryptedData::Login {
+            username,
+            password,
+            totp,
+            uris,
+        } => {
             let mut history = entry.history.clone();
             let rbw::db::EntryData::Login {
-                username: entry_username,
                 password: entry_password,
-                uris: entry_uris,
-                totp: entry_totp,
+                ..
             } = &entry.data
             else {
-                unreachable!();
+                unreachable!()
             };
 
-            if let Some(prev_password) = entry_password.clone() {
+            let login = LoginState {
+                username: username.clone(),
+                password: password.clone(),
+                totp: totp.clone(),
+                uris: uris
+                    .as_deref()
+                    .unwrap_or(&[])
+                    .iter()
+                    .map(|uri| rbw::db::Uri {
+                        uri: uri.uri.clone(),
+                        match_type: uri.match_type,
+                    })
+                    .collect(),
+                notes: decrypted.notes.clone(),
+            };
+            let login = if full {
+                login.edit_full()
+            } else {
+                login.edit_legacy()
+            }?;
+
+            if let Some(entry_password) = entry_password
+                && login.password != *password
+            {
                 let new_history_entry = rbw::db::HistoryEntry {
                     last_used_date: format!(
                         "{}",
@@ -1815,17 +1887,15 @@ pub fn edit(
                             std::time::SystemTime::now()
                         )
                     ),
-                    password: prev_password,
+                    password: entry_password.clone(),
                 };
                 history.insert(0, new_history_entry);
             }
-
-            let data = rbw::db::EntryData::Login {
-                username: entry_username.clone(),
-                password,
-                uris: entry_uris.clone(),
-                totp: entry_totp.clone(),
-            };
+            let notes = encrypt_optional_string(
+                login.notes.as_deref(),
+                entry.org_id.as_deref(),
+            )?;
+            let data = login.encrypt(entry.org_id.as_deref())?;
             (data, entry.fields, notes, history)
         }
         DecryptedData::SecureNote => {

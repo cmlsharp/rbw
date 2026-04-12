@@ -1,5 +1,14 @@
 # rbw
 
+This is my fork of rbw.
+
+Changelog:
+* Add --full to `rbw add` and `rbw edit` which opens the editor to a YAML file containing the entire vault entry
+* Fix a bug whereby `rbw` sent the wrong client version information to Bitwarden resulting in edits getting rejected.
+
+`rbw` README.md below:
+---
+
 This is an unofficial command line client for
 [Bitwarden](https://bitwarden.com/). Although Bitwarden does come with its own
 [command line client](https://help.bitwarden.com/article/cli/), it is

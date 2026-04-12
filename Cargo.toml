@@ -1,9 +1,9 @@
 [package]
 name = "rbw"
-version = "1.15.0"
+version = "1.16.0"
 authors = ["Jesse Luehrs <doy@tozt.net>"]
-edition = "2021"
-rust-version = "1.82.0"
+edition = "2024"
+rust-version = "1.85.0"
 
 description = "Unofficial Bitwarden CLI"
 repository = "https://github.com/doy/rbw"
@@ -87,6 +87,7 @@ zeroize = "1.8.2"
 arboard = { version = "3.6.1", default-features = false, features = [
     "wayland-data-control",
 ], optional = true }
+yaml_serde = "0.10.4"
 
 [features]
 default = ["clipboard"]
