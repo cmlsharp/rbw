@@ -7,6 +7,7 @@ Changelog:
 * Fix a bug whereby `rbw` sent the wrong client version information to Bitwarden resulting in edits getting rejected.
 
 `rbw` README.md below:
+
 ---
 
 This is an unofficial command line client for
