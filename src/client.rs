@@ -1501,7 +1501,6 @@ impl<C: CryptoProvider> Client<C> {
         entry: &crate::db::Entry,
         data: &crate::decrypted::Data,
         notes: Option<&str>,
-        history: &[crate::db::HistoryEntry],
     ) -> anyhow::Result<()> {
         let mut db = self.load_db()?;
         let access_token = db
@@ -1512,6 +1511,41 @@ impl<C: CryptoProvider> Client<C> {
             db.refresh_token.as_ref().context("not logged in")?;
 
         let org_id = entry.org_id.as_deref();
+
+        // If the password changed, push the old encrypted password into history.
+        let mut history = entry.history.clone();
+        if let (
+            crate::db::EntryData::Login {
+                password: Some(old_encrypted),
+                ..
+            },
+            crate::decrypted::Data::Login {
+                password: new_plaintext,
+                ..
+            },
+        ) = (&entry.data, data)
+        {
+            let old_plaintext = self.crypto.decrypt(
+                old_encrypted,
+                entry.key.as_deref(),
+                org_id,
+            )?;
+            if new_plaintext.as_deref() != Some(old_plaintext.as_str()) {
+                history.insert(
+                    0,
+                    crate::db::HistoryEntry {
+                        last_used_date: format!(
+                            "{}",
+                            humantime::format_rfc3339(
+                                std::time::SystemTime::now()
+                            )
+                        ),
+                        password: old_encrypted.clone(),
+                    },
+                );
+            }
+        }
+
         let encrypted_data = self.encrypt_entry_data(data, org_id)?;
         let encrypted_notes =
             self.encrypt_optional_string(notes, org_id)?;
@@ -1526,7 +1560,7 @@ impl<C: CryptoProvider> Client<C> {
             &entry.fields,
             encrypted_notes.as_deref(),
             entry.folder_id.as_deref(),
-            history,
+            &history,
         )? {
             db.access_token = Some(new_access_token);
             self.save_db(&db)?;

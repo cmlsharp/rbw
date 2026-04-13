@@ -21,9 +21,8 @@ use ratatui::{
 
 use crate::{
     browser,
-    clipboard::DEFAULT_CLIPBOARD_TIMEOUT_SECONDS,
     config::{AppConfig, Palette},
-    create,
+    form,
     domain::{Entry, Scope},
     generator, rbw,
 };
@@ -152,7 +151,6 @@ pub struct Context {
     pub username: String,
     pub emit_output: bool,
     pub palette: Palette,
-    clear_timeout_seconds: u64,
 }
 
 /// High-level modal/screen mode.
@@ -161,7 +159,7 @@ pub enum Mode {
     Normal,
     Search,
     Generator(generator::State),
-    Create(create::State),
+    Form(form::State),
     DeleteConfirm(Entry),
 }
 
@@ -311,7 +309,7 @@ fn cursor_for_state(state: &State, area: Rect) -> Option<(u16, u16)> {
         Mode::Generator(generator) if generator.editing_length => {
             Some(generator::cursor_position(area, generator))
         }
-        Mode::Create(create) => Some(create::cursor_position(area, create)),
+        Mode::Form(form_state) => Some(form::cursor_position(area, form_state)),
         _ => None,
     }
 }
@@ -334,8 +332,8 @@ fn render(
                 &state.context.palette,
                 generator,
             ),
-            Mode::Create(create) => {
-                create::render_modal(frame, &state.context.palette, create)
+            Mode::Form(form_state) => {
+                form::render_modal(frame, &state.context.palette, form_state)
             }
             Mode::DeleteConfirm(entry) => browser::delete::render_confirm(
                 frame,
@@ -371,9 +369,6 @@ pub fn run(
         url,
         username,
         emit_output,
-        clear_timeout_seconds: config
-            .clear_timeout_seconds
-            .unwrap_or(DEFAULT_CLIPBOARD_TIMEOUT_SECONDS),
         palette,
     };
     let mut browser = browser::State::new(scope, entries);
@@ -396,7 +391,7 @@ pub fn run(
         state.browser.ensure_selected_visible();
         state.browser.viewport_rows = render(&mut terminal, &state)?;
         let show_cursor = match &state.mode {
-            Mode::Search | Mode::Create(_) => true,
+            Mode::Search | Mode::Form(_) => true,
             Mode::Generator(generator) => generator.editing_length,
             _ => false,
         };

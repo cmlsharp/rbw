@@ -6,7 +6,6 @@ use serde::Deserialize;
 /// Optional YAML configuration file contents.
 #[derive(Debug, Clone, Default, Deserialize)]
 pub(super) struct AppConfig {
-    pub clear_timeout_seconds: Option<u64>,
     pub generator: Option<GeneratorConfig>,
     pub palette: Option<PaletteConfig>,
 }

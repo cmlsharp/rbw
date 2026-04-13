@@ -1,5 +1,5 @@
 use crate::config::AppConfig;
-use crate::create;
+use crate::form;
 
 pub const GENERATOR_MODES: [&str; 4] = ["standard", "no-symbols", "diceware", "numeric"];
 
@@ -19,7 +19,7 @@ pub struct State {
     pub editing_length: bool,
     pub length_buffer: String,
     pub length_touched: bool,
-    pub return_to_create: Option<create::State>,
+    pub return_to_form: Option<form::State>,
 }
 
 impl State {
@@ -32,7 +32,7 @@ impl State {
             editing_length: false,
             length_buffer,
             length_touched: false,
-            return_to_create: None,
+            return_to_form: None,
         }
     }
 

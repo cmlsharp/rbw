@@ -2,7 +2,7 @@ use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 
 use super::reducer::Action;
 use super::{Mode, State};
-use crate::{browser, create, generator};
+use crate::{browser, form, generator};
 
 pub(crate) trait StaticLabel {
     fn label(&self) -> &'static str;
@@ -267,7 +267,7 @@ pub(super) fn map_key_to_actions(state: &State, key: KeyEvent) -> Vec<Action> {
         Mode::Normal => browser::map_browser_key(state, key),
         Mode::Search => browser::map_search_key(key),
         Mode::Generator(generator) => generator::map_generator_key(generator, key),
-        Mode::Create(_) => create::map_create_key(key),
+        Mode::Form(_) => form::map_form_key(key),
         Mode::DeleteConfirm(_) => browser::delete::key_map(key),
     }
 }

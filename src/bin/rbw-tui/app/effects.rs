@@ -1,4 +1,4 @@
-use crate::{app::input::StaticLabel, clipboard, rbw};
+use crate::{app::input::StaticLabel, rbw};
 
 use crate::{
     domain::{Entry, EntryDraft, EntryExt as _, YankTarget},
@@ -11,13 +11,16 @@ pub(crate) enum Effect {
     CopyTarget {
         value: String,
         label: YankTarget,
-        timeout: u64,
     },
     ResolveSelection(Entry),
     GeneratePassword {
         settings: generator::Settings,
     },
     CreateEntry(EntryDraft),
+    EditEntry {
+        entry_id: String,
+        draft: EntryDraft,
+    },
     DeleteEntry(String, String),
 }
 
@@ -28,6 +31,7 @@ impl Effect {
         match self {
             Self::SyncVault => Some("Syncing..."),
             Self::CreateEntry(_) => Some("Creating..."),
+            Self::EditEntry { .. } => Some("Saving..."),
             Self::DeleteEntry(_, _) => Some("Deleting..."),
             Self::CopyTarget { .. }
             | Self::ResolveSelection(..)
@@ -38,7 +42,6 @@ impl Effect {
     pub(crate) fn copy_target(
         entry: &Entry,
         target: YankTarget,
-        timeout: u64,
     ) -> Effect {
         use YankTarget as Y;
         let value = match target {
@@ -57,7 +60,6 @@ impl Effect {
         Self::CopyTarget {
             value,
             label: target,
-            timeout,
         }
     }
 
@@ -76,6 +78,10 @@ pub(crate) enum EffectOutcome {
     },
     Created {
         draft: EntryDraft,
+        entries: Vec<Entry>,
+    },
+    Edited {
+        name: String,
         entries: Vec<Entry>,
     },
     Deleted {
@@ -107,15 +113,11 @@ impl Effect {
                 .and_then(|()| rbw::list_entries())
                 .map_err(|err| format!("Sync failed: {err}"))
                 .map(EffectOutcome::Synced),
-            Self::CopyTarget {
-                value,
-                label,
-                timeout,
-            } => {
+            Self::CopyTarget { value, label } => {
                 if value.is_empty() {
                     return Err(format!("No {} for entry", label.label()));
                 }
-                clipboard::copy_text(&value, timeout)
+                rbw::clipboard_store(&value)
                     .map_err(|err| format!("Copy failed: {err}"))?;
                 Ok(EffectOutcome::Copied(label.label()))
             }
@@ -132,18 +134,26 @@ impl Effect {
                     .and_then(|()| rbw::sync_vault())
                     .and_then(|()| rbw::list_entries())
                     .map_err(|err| format!("Create failed: {err}"))
+                    .map(|entries| EffectOutcome::Created { draft, entries })
             }
-            .map(|entries| EffectOutcome::Created { draft, entries }),
+            Self::EditEntry { entry_id, draft } => {
+                let name = draft.name.clone();
+                rbw::edit_entry(&entry_id, &draft)
+                    .and_then(|()| rbw::sync_vault())
+                    .and_then(|()| rbw::list_entries())
+                    .map_err(|err| format!("Edit failed: {err}"))
+                    .map(|entries| EffectOutcome::Edited { name, entries })
+            }
             Self::DeleteEntry(id, name) => {
                 rbw::remove_entry(&id)
                     .and_then(|()| rbw::sync_vault())
                     .and_then(|()| rbw::list_entries())
                     .map_err(|err| format!("Delete failed: {err}"))
+                    .map(|entries| EffectOutcome::Deleted {
+                        entry_name: name,
+                        entries,
+                    })
             }
-            .map(|entries| EffectOutcome::Deleted {
-                entry_name: name,
-                entries,
-            }),
         }
     }
 }

@@ -1257,22 +1257,13 @@ pub fn edit(
         find_entry(&db, name, username, folder, ignore_case)
             .with_context(|| format!("couldn't find entry for '{desc}'"))?;
 
-    let (data, notes, history) = match &decrypted.data {
+    let (data, notes) = match &decrypted.data {
         DecryptedData::Login {
             username,
             password,
             totp,
             uris,
         } => {
-            let mut history = entry.history.clone();
-            let rbw::db::EntryData::Login {
-                password: entry_password,
-                ..
-            } = &entry.data
-            else {
-                unreachable!()
-            };
-
             let login = LoginState {
                 username: username.clone(),
                 password: password.clone(),
@@ -1294,21 +1285,6 @@ pub fn edit(
                 login.edit_legacy(file)
             }?;
 
-            if let Some(entry_password) = entry_password
-                && login.password != *password
-            {
-                let new_history_entry = rbw::db::HistoryEntry {
-                    last_used_date: format!(
-                        "{}",
-                        humantime::format_rfc3339(
-                            std::time::SystemTime::now()
-                        )
-                    ),
-                    password: entry_password.clone(),
-                };
-                history.insert(0, new_history_entry);
-            }
-
             let data = DecryptedData::Login {
                 username: login.username,
                 password: login.password,
@@ -1324,7 +1300,7 @@ pub fn edit(
                         .collect(),
                 ),
             };
-            (data, login.notes, history)
+            (data, login.notes)
         }
         DecryptedData::SecureNote => {
             let editor_content = decrypted.notes.map_or_else(
@@ -1336,7 +1312,7 @@ pub fn edit(
             // prepend blank line to be parsed as pw by `parse_editor`
             let (_, notes) = parse_editor(&format!("\n{contents}\n"));
 
-            (DecryptedData::SecureNote, notes, entry.history.clone())
+            (DecryptedData::SecureNote, notes)
         }
         _ => {
             return Err(anyhow::anyhow!(
@@ -1345,7 +1321,7 @@ pub fn edit(
         }
     };
 
-    client().edit_entry(&entry, &data, notes.as_deref(), &history)?;
+    client().edit_entry(&entry, &data, notes.as_deref())?;
 
     client().sync()?;
     Ok(())

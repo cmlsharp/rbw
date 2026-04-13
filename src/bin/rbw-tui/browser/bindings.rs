@@ -27,6 +27,7 @@ pub enum Action {
     YankPrefix,
     Select,
     Create,
+    Edit,
     Delete,
     Bottom,
 }
@@ -53,6 +54,7 @@ impl StaticLabel for Action {
             Self::YankPrefix => "yank",
             Self::Select => "select",
             Self::Create => "add",
+            Self::Edit => "edit",
             Self::Delete => "delete",
             Self::Bottom => "bottom",
         }
@@ -90,6 +92,7 @@ const NORMAL_BINDINGS: &[Binding<Action>] = &[
     bind!('r' => Action::Sync, hint),
     bind!('y' => Action::YankPrefix, hint),
     bind!('a' => Action::Create, hint),
+    bind!('e' => Action::Edit, hint),
     bind!('d' => Action::Delete, hint),
     bind!('G' => Action::Bottom),
     bind!(ctrl + 'v' => Action::RevealPassword, hint),

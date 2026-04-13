@@ -13,7 +13,7 @@ pub(crate) use self::{
 
 use crate::{
     app::{self, Context, Effect, Mode, SystemAction, Transition},
-    create,
+    form,
     domain::draft_from_seed,
 };
 
@@ -59,7 +59,6 @@ pub(crate) fn map_search_key(key: KeyEvent) -> Vec<app::Action> {
 pub(crate) fn reduce_browser(
     state: &mut State,
     context: &Context,
-    clear_timeout_seconds: u64,
     action: Action,
 ) -> Transition {
     match action {
@@ -145,7 +144,7 @@ pub(crate) fn reduce_browser(
             let Some(entry) = state.selected_entry().cloned() else {
                 return Transition::none();
             };
-            Transition::effect(Effect::copy_target(&entry, target, clear_timeout_seconds))
+            Transition::effect(Effect::copy_target(&entry, target))
         }
         Action::YankPrefix => {
             state.pending = Some(PendingPrefix::Yank);
@@ -161,7 +160,15 @@ pub(crate) fn reduce_browser(
         Action::Create => {
             state.clear_prefixes();
             let draft = draft_from_seed(&context.url, &context.username);
-            Transition::mode(Mode::Create(create::State::new(draft)))
+            Transition::mode(Mode::Form(form::State::new_create(draft)))
+        }
+        Action::Edit => {
+            state.clear_prefixes();
+            state
+                .selected_entry()
+                .cloned()
+                .map(|entry| Transition::mode(Mode::Form(form::State::new_edit(&entry))))
+                .unwrap_or_else(Transition::none)
         }
         Action::Delete => {
             state.clear_prefixes();

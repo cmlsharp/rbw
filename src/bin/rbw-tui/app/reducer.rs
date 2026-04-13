@@ -1,4 +1,4 @@
-use crate::{browser, create, domain::EntryExt as _, generator};
+use crate::{browser, form, domain::EntryExt as _, generator};
 
 use super::{Effect, EffectOutcome, EffectResult, Mode, State};
 
@@ -6,7 +6,7 @@ use super::{Effect, EffectOutcome, EffectResult, Mode, State};
 pub(crate) enum Action {
     System(SystemAction),
     Browser(browser::Action),
-    Create(create::Action),
+    Form(form::Action),
     Generator(generator::Action),
     Delete(browser::delete::Action),
 }
@@ -91,18 +91,17 @@ pub(super) fn reduce(state: &mut State, action: Action) -> Transition {
         Action::Browser(action) => browser::reduce_browser(
             &mut state.browser,
             &state.context,
-            state.context.clear_timeout_seconds,
             action,
         ),
-        Action::Create(action) => {
+        Action::Form(action) => {
             debug_assert!(
-                matches!(state.mode, Mode::Create(_)),
-                "Create action dispatched outside Create mode"
+                matches!(state.mode, Mode::Form(_)),
+                "Form action dispatched outside Form mode"
             );
-            let Mode::Create(create) = &mut state.mode else {
+            let Mode::Form(form_state) = &mut state.mode else {
                 return Transition::none();
             };
-            create::reduce_create(create, &state.generator_settings, action)
+            form::reduce_form(form_state, &state.generator_settings, action)
         }
         Action::Generator(action) => {
             debug_assert!(
@@ -163,14 +162,14 @@ fn apply_effect_outcome(state: &mut State, outcome: EffectOutcome) -> Transition
         EffectOutcome::Copied(label) => Transition::notify(format!("Copied {label}")),
         EffectOutcome::SelectionReady(json) => Transition::output(json),
         EffectOutcome::GeneratedPassword { password } => {
-            let return_to_create = match &mut state.mode {
-                Mode::Generator(generator) => generator.return_to_create.take(),
+            let return_to_form = match &mut state.mode {
+                Mode::Generator(generator) => generator.return_to_form.take(),
                 _ => None,
             };
-            match return_to_create {
-                Some(mut create_state) => {
-                    create_state.apply_generated_password(password);
-                    Transition::mode(Mode::Create(create_state))
+            match return_to_form {
+                Some(mut form_state) => {
+                    form_state.apply_generated_password(password);
+                    Transition::mode(Mode::Form(form_state))
                 }
                 None => Transition::mode(Mode::Normal).with_notification("Generated password", false),
             }
@@ -183,6 +182,10 @@ fn apply_effect_outcome(state: &mut State, outcome: EffectOutcome) -> Transition
                 state.browser.selected = index;
             }
             Transition::mode(Mode::Normal).with_notification(format!("Created {}", draft.name), false)
+        }
+        EffectOutcome::Edited { name, entries } => {
+            state.browser.replace_entries(entries, &state.context);
+            Transition::mode(Mode::Normal).with_notification(format!("Edited {name}"), false)
         }
         EffectOutcome::Deleted { entry_name, entries } => {
             state.browser.replace_entries(entries, &state.context);

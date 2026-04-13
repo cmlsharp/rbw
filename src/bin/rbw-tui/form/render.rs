@@ -129,7 +129,7 @@ fn build_layout(create: &State, width: u16, height: u16) -> LayoutInfo {
 
 pub(crate) fn render_modal(frame: &mut ratatui::Frame<'_>, palette: &Palette, create: &State) {
     let inner =
-        crate::app::render_popup_shell(frame, 76, 18, "Create Bitwarden Entry", palette.accent);
+        crate::app::render_popup_shell(frame, 76, 18, create.title(), palette.accent);
     let rows = Layout::default()
         .direction(Direction::Vertical)
         .constraints([Constraint::Min(0), Constraint::Length(2)])

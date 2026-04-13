@@ -38,8 +38,8 @@ pub(crate) fn reduce_generator(
                 state.commit_length();
                 return Transition::none();
             }
-            if let Some(create) = state.return_to_create.clone() {
-                Transition::mode(Mode::Create(create))
+            if let Some(form_state) = state.return_to_form.clone() {
+                Transition::mode(Mode::Form(form_state))
             } else {
                 Transition::mode(Mode::Normal)
             }

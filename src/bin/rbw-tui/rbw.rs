@@ -38,6 +38,24 @@ pub fn add_entry(draft: &EntryDraft) -> Result<()> {
     client().add_entry(draft)
 }
 
+/// Edits an existing entry by id, replacing its data with the draft contents.
+pub fn edit_entry(entry_id: &str, draft: &EntryDraft) -> Result<()> {
+    let c = client();
+    let db = c.load_db()?;
+    let entry = db
+        .entries
+        .iter()
+        .find(|e| e.id == entry_id)
+        .ok_or_else(|| anyhow::anyhow!("entry not found"))?;
+
+    c.edit_entry(entry, &draft.to_data(), draft.notes_option())
+}
+
+/// Copies text to the clipboard via the agent.
+pub fn clipboard_store(text: &str) -> Result<()> {
+    client().clipboard_store(text)
+}
+
 /// Removes one entry by id.
 pub fn remove_entry(entry_id: &str) -> Result<()> {
     client().remove_entry(entry_id)

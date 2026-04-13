@@ -17,7 +17,7 @@ use crate::{
 
 use self::bindings::bindings;
 
-pub(crate) fn map_create_key(key: KeyEvent) -> Vec<app::Action> {
+pub(crate) fn map_form_key(key: KeyEvent) -> Vec<app::Action> {
     lookup_action_with_fallback(&bindings(), key, |key| match key.code {
         KeyCode::Backspace => Some(Action::Backspace),
         KeyCode::Char(ch) if key.modifiers.is_empty() || key.modifiers == KeyModifiers::SHIFT => {
@@ -25,11 +25,11 @@ pub(crate) fn map_create_key(key: KeyEvent) -> Vec<app::Action> {
         }
         _ => None,
     })
-    .map(|action| vec![app::Action::Create(action)])
+    .map(|action| vec![app::Action::Form(action)])
     .unwrap_or_default()
 }
 
-pub(crate) fn reduce_create(
+pub(crate) fn reduce_form(
     state: &mut State,
     generator_settings: &generator::Settings,
     action: Action,
@@ -50,7 +50,7 @@ pub(crate) fn reduce_create(
         }
         Action::GeneratePassword => {
             let mut generator = generator::State::from_settings(generator_settings.clone());
-            generator.return_to_create = Some(state.clone());
+            generator.return_to_form = Some(state.clone());
             Transition::mode(Mode::Generator(generator))
         }
         Action::AddUri => {
@@ -66,7 +66,17 @@ pub(crate) fn reduce_create(
                 Transition::notify_error("Name is required")
             } else {
                 state.draft.clean_uris();
-                Transition::effect(Effect::CreateEntry(state.draft.clone()))
+                match &state.purpose {
+                    state::Purpose::Create => {
+                        Transition::effect(Effect::CreateEntry(state.draft.clone()))
+                    }
+                    state::Purpose::Edit { entry_id } => {
+                        Transition::effect(Effect::EditEntry {
+                            entry_id: entry_id.clone(),
+                            draft: state.draft.clone(),
+                        })
+                    }
+                }
             }
         }
         Action::Backspace => {

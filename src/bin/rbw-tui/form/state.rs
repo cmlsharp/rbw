@@ -1,6 +1,6 @@
-use crate::domain::EntryDraft;
+use crate::domain::{Entry, EntryDraft, EntryExt as _};
 
-/// Identifies one editable field in the create-entry form.
+/// Identifies one editable field in the form.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Field {
     Name,
@@ -11,10 +11,18 @@ pub enum Field {
     Notes,
 }
 
-/// Create-entry modal state.
+/// Whether the form is creating a new entry or editing an existing one.
+#[derive(Debug, Clone)]
+pub enum Purpose {
+    Create,
+    Edit { entry_id: String },
+}
+
+/// Entry form modal state (shared by create and edit).
 #[derive(Debug, Clone)]
 pub struct State {
     pub draft: EntryDraft,
+    pub purpose: Purpose,
     pub field: Field,
     pub show_password: bool,
     pub replace_on_input: bool,
@@ -36,15 +44,46 @@ impl Field {
 
 impl State {
     /// Starts a fresh create-entry session.
-    pub fn new(mut draft: EntryDraft) -> Self {
+    pub fn new_create(mut draft: EntryDraft) -> Self {
         if draft.uris.is_empty() {
             draft.uris.push(String::new());
         }
         Self {
             draft,
+            purpose: Purpose::Create,
             field: Field::Name,
             show_password: false,
             replace_on_input: true,
+        }
+    }
+
+    /// Starts an edit session from an existing decrypted entry.
+    pub fn new_edit(entry: &Entry) -> Self {
+        let uris = entry.uri_strings().into_iter().map(str::to_string).collect::<Vec<_>>();
+        let draft = EntryDraft {
+            name: entry.name.clone(),
+            username: entry.username().to_string(),
+            password: entry.password().to_string(),
+            totp: entry.totp().unwrap_or_default().to_string(),
+            uris: if uris.is_empty() { vec![String::new()] } else { uris },
+            folder: entry.folder_str().to_string(),
+            notes: entry.notes_str().to_string(),
+            org_id: None,
+        };
+        Self {
+            draft,
+            purpose: Purpose::Edit { entry_id: entry.id.clone() },
+            field: Field::Name,
+            show_password: false,
+            replace_on_input: true,
+        }
+    }
+
+    /// Title for the modal popup.
+    pub fn title(&self) -> &'static str {
+        match &self.purpose {
+            Purpose::Create => "Create Entry",
+            Purpose::Edit { .. } => "Edit Entry",
         }
     }
 
