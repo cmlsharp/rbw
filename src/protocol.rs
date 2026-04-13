@@ -149,6 +149,25 @@ impl Environment {
         }
     }
 
+    /// Builds an `Environment` from the current process state (tty + env vars).
+    pub fn from_current() -> Self {
+        let tty = std::env::var_os("RBW_TTY").or_else(|| {
+            rustix::termios::ttyname(std::io::stdin(), vec![])
+                .ok()
+                .map(|p| {
+                    use std::os::unix::ffi::OsStringExt as _;
+                    std::ffi::OsString::from_vec(p.as_bytes().to_vec())
+                })
+        });
+
+        let env_vars = std::env::vars_os()
+            .filter(|(var_name, _)| {
+                (*ENVIRONMENT_VARIABLES_OS).contains(var_name)
+            })
+            .collect();
+        Self::new(tty, env_vars)
+    }
+
     pub fn tty(&self) -> Option<&std::ffi::OsStr> {
         self.tty.as_ref().map(|tty| tty.0.as_os_str())
     }

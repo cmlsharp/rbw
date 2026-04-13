@@ -1,6 +1,9 @@
-use std::{fmt::Write as _, io::Write as _, os::unix::ffi::OsStrExt as _};
+use std::{fmt::Write as _, io::Write as _};
 
 use anyhow::Context as _;
+pub use rbw::client::Needle;
+
+pub use rbw::client::parse_needle;
 
 // The default number of seconds the generated TOTP
 // code lasts for before a new one must be generated
@@ -15,167 +18,11 @@ const MISSING_CONFIG_HELP: &str = "Before using rbw, you must configure the emai
     and, if your server has a non-default identity url:\n\n    \
         rbw config set identity_url <url>\n";
 
-#[derive(Debug, Clone)]
-pub enum Needle {
-    Name(String),
-    Uri(url::Url),
-    Uuid(uuid::Uuid, String),
-}
+type DecryptedCipher = rbw::decrypted::Cipher;
+type DecryptedData = rbw::decrypted::Data;
+type DecryptedSearchCipher = rbw::client::SearchEntry;
 
-impl std::fmt::Display for Needle {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let value = match &self {
-            Self::Name(name) => name.clone(),
-            Self::Uri(uri) => uri.to_string(),
-            Self::Uuid(_, s) => s.clone(),
-        };
-        write!(f, "{value}")
-    }
-}
-
-#[allow(clippy::unnecessary_wraps)]
-pub fn parse_needle(arg: &str) -> Result<Needle, std::convert::Infallible> {
-    if let Ok(uuid) = uuid::Uuid::parse_str(arg) {
-        return Ok(Needle::Uuid(uuid, arg.to_string()));
-    }
-    if let Ok(url) = url::Url::parse(arg) {
-        if url.is_special() {
-            return Ok(Needle::Uri(url));
-        }
-    }
-
-    Ok(Needle::Name(arg.to_string()))
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-enum Field {
-    Notes,
-    Username,
-    Password,
-    Totp,
-    Uris,
-    IdentityName,
-    City,
-    State,
-    PostalCode,
-    Country,
-    Phone,
-    Ssn,
-    License,
-    Passport,
-    CardNumber,
-    Expiration,
-    ExpMonth,
-    ExpYear,
-    Cvv,
-    Cardholder,
-    Brand,
-    Name,
-    Email,
-    Address,
-    Address1,
-    Address2,
-    Address3,
-    Fingerprint,
-    PublicKey,
-    PrivateKey,
-    Title,
-    FirstName,
-    MiddleName,
-    LastName,
-}
-
-impl std::str::FromStr for Field {
-    type Err = anyhow::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(match s.to_lowercase().as_str() {
-            "notes" | "note" => Self::Notes,
-            "username" | "user" => Self::Username,
-            "password" => Self::Password,
-            "totp" | "code" => Self::Totp,
-            "uris" | "urls" | "sites" => Self::Uris,
-            "identityname" => Self::IdentityName,
-            "city" => Self::City,
-            "state" => Self::State,
-            "postcode" | "zipcode" | "zip" => Self::PostalCode,
-            "country" => Self::Country,
-            "phone" => Self::Phone,
-            "ssn" => Self::Ssn,
-            "license" => Self::License,
-            "passport" => Self::Passport,
-            "number" | "card" => Self::CardNumber,
-            "exp" => Self::Expiration,
-            "exp_month" | "month" => Self::ExpMonth,
-            "exp_year" | "year" => Self::ExpYear,
-            // the word "code" got preceeded by Totp
-            "cvv" => Self::Cvv,
-            "cardholder" | "cardholder_name" => Self::Cardholder,
-            "brand" | "type" => Self::Brand,
-            "name" => Self::Name,
-            "email" => Self::Email,
-            "address1" => Self::Address1,
-            "address2" => Self::Address2,
-            "address3" => Self::Address3,
-            "address" => Self::Address,
-            "fingerprint" => Self::Fingerprint,
-            "public_key" => Self::PublicKey,
-            "private_key" => Self::PrivateKey,
-            "title" => Self::Title,
-            "first_name" => Self::FirstName,
-            "middle_name" => Self::MiddleName,
-            "last_name" => Self::LastName,
-            _ => anyhow::bail!("unknown field {s}"),
-        })
-    }
-}
-
-impl Field {
-    fn as_str(&self) -> &str {
-        match self {
-            Self::Notes => "notes",
-            Self::Username => "username",
-            Self::Password => "password",
-            Self::Totp => "totp",
-            Self::Uris => "uris",
-            Self::IdentityName => "identityname",
-            Self::City => "city",
-            Self::State => "state",
-            Self::PostalCode => "postcode",
-            Self::Country => "country",
-            Self::Phone => "phone",
-            Self::Ssn => "ssn",
-            Self::License => "license",
-            Self::Passport => "passport",
-            Self::CardNumber => "number",
-            Self::Expiration => "exp",
-            Self::ExpMonth => "exp_month",
-            Self::ExpYear => "exp_year",
-            Self::Cvv => "cvv",
-            Self::Cardholder => "cardholder",
-            Self::Brand => "brand",
-            Self::Name => "name",
-            Self::Email => "email",
-            Self::Address1 => "address1",
-            Self::Address2 => "address2",
-            Self::Address3 => "address3",
-            Self::Address => "address",
-            Self::Fingerprint => "fingerprint",
-            Self::PublicKey => "public_key",
-            Self::PrivateKey => "private_key",
-            Self::Title => "title",
-            Self::FirstName => "first_name",
-            Self::MiddleName => "middle_name",
-            Self::LastName => "last_name",
-        }
-    }
-}
-
-impl std::fmt::Display for Field {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.as_str())
-    }
-}
+use rbw::client::FieldName as Field;
 
 #[derive(Debug, serde::Serialize)]
 struct DecryptedListCipher {
@@ -186,139 +33,6 @@ struct DecryptedListCipher {
     uris: Option<Vec<String>>,
     #[serde(rename = "type")]
     entry_type: Option<String>,
-}
-
-#[derive(Debug, Clone, serde::Serialize)]
-#[cfg_attr(test, derive(Eq, PartialEq))]
-struct DecryptedSearchCipher {
-    id: String,
-    #[serde(rename = "type")]
-    entry_type: String,
-    folder: Option<String>,
-    name: String,
-    user: Option<String>,
-    uris: Vec<(String, Option<rbw::api::UriMatchType>)>,
-    fields: Vec<String>,
-    notes: Option<String>,
-}
-
-impl DecryptedSearchCipher {
-    fn display_name(&self) -> String {
-        self.user.as_ref().map_or_else(
-            || self.name.clone(),
-            |user| format!("{user}@{}", self.name),
-        )
-    }
-
-    fn matches(
-        &self,
-        needle: &Needle,
-        username: Option<&str>,
-        folder: Option<&str>,
-        ignore_case: bool,
-        strict_username: bool,
-        strict_folder: bool,
-        exact: bool,
-    ) -> bool {
-        let match_str = match (ignore_case, exact) {
-            (true, true) => |field: &str, search_term: &str| {
-                field.to_lowercase() == search_term.to_lowercase()
-            },
-            (true, false) => |field: &str, search_term: &str| {
-                field.to_lowercase().contains(&search_term.to_lowercase())
-            },
-            (false, true) => {
-                |field: &str, search_term: &str| field == search_term
-            }
-            (false, false) => {
-                |field: &str, search_term: &str| field.contains(search_term)
-            }
-        };
-
-        match (self.folder.as_deref(), folder) {
-            (Some(folder), Some(given_folder)) => {
-                if !match_str(folder, given_folder) {
-                    return false;
-                }
-            }
-            (Some(_), None) => {
-                if strict_folder {
-                    return false;
-                }
-            }
-            (None, Some(_)) => {
-                return false;
-            }
-            (None, None) => {}
-        }
-
-        match (&self.user, username) {
-            (Some(username), Some(given_username)) => {
-                if !match_str(username, given_username) {
-                    return false;
-                }
-            }
-            (Some(_), None) => {
-                if strict_username {
-                    return false;
-                }
-            }
-            (None, Some(_)) => {
-                return false;
-            }
-            (None, None) => {}
-        }
-
-        match needle {
-            Needle::Uuid(uuid, s) => {
-                if uuid::Uuid::parse_str(&self.id) != Ok(*uuid)
-                    && !match_str(&self.name, s)
-                {
-                    return false;
-                }
-            }
-            Needle::Name(name) => {
-                if !match_str(&self.name, name) {
-                    return false;
-                }
-            }
-            Needle::Uri(given_uri) => {
-                if self.uris.iter().all(|(uri, match_type)| {
-                    !matches_url(uri, *match_type, given_uri)
-                }) {
-                    return false;
-                }
-            }
-        }
-
-        true
-    }
-
-    fn search_match(&self, term: &str, folder: Option<&str>) -> bool {
-        if let Some(folder) = folder {
-            if self.folder.as_deref() != Some(folder) {
-                return false;
-            }
-        }
-
-        let mut fields = vec![self.name.clone()];
-        if let Some(notes) = &self.notes {
-            fields.push(notes.clone());
-        }
-        if let Some(user) = &self.user {
-            fields.push(user.clone());
-        }
-        fields.extend(self.uris.iter().map(|(uri, _)| uri).cloned());
-        fields.extend(self.fields.iter().cloned());
-
-        for field in fields {
-            if field.to_lowercase().contains(&term.to_lowercase()) {
-                return true;
-            }
-        }
-
-        false
-    }
 }
 
 impl From<DecryptedSearchCipher> for DecryptedListCipher {
@@ -334,19 +48,15 @@ impl From<DecryptedSearchCipher> for DecryptedListCipher {
     }
 }
 
-#[derive(Debug, Clone, serde::Serialize)]
-#[cfg_attr(test, derive(Eq, PartialEq))]
-struct DecryptedCipher {
-    id: String,
-    folder: Option<String>,
-    name: String,
-    data: DecryptedData,
-    fields: Vec<DecryptedField>,
-    notes: Option<String>,
-    history: Vec<DecryptedHistoryEntry>,
+trait CipherDisplay {
+    fn display_short(&self, desc: &str, clipboard: bool) -> bool;
+    fn display_field(&self, desc: &str, field: &str, clipboard: bool);
+    fn display_long(&self, desc: &str, clipboard: bool);
+    fn display_fields_list(&self);
+    fn display_json(&self, desc: &str) -> anyhow::Result<()>;
 }
 
-impl DecryptedCipher {
+impl CipherDisplay for DecryptedCipher {
     fn display_short(&self, desc: &str, clipboard: bool) -> bool {
         match &self.data {
             DecryptedData::Login { password, .. } => {
@@ -1017,166 +727,6 @@ fn val_display_or_store(clipboard: bool, password: &str) -> bool {
     }
 }
 
-#[derive(Debug, Clone, serde::Serialize)]
-#[serde(untagged)]
-#[cfg_attr(test, derive(Eq, PartialEq))]
-enum DecryptedData {
-    Login {
-        username: Option<String>,
-        password: Option<String>,
-        totp: Option<String>,
-        uris: Option<Vec<DecryptedUri>>,
-    },
-    Card {
-        cardholder_name: Option<String>,
-        number: Option<String>,
-        brand: Option<String>,
-        exp_month: Option<String>,
-        exp_year: Option<String>,
-        code: Option<String>,
-    },
-    Identity {
-        title: Option<String>,
-        first_name: Option<String>,
-        middle_name: Option<String>,
-        last_name: Option<String>,
-        address1: Option<String>,
-        address2: Option<String>,
-        address3: Option<String>,
-        city: Option<String>,
-        state: Option<String>,
-        postal_code: Option<String>,
-        country: Option<String>,
-        phone: Option<String>,
-        email: Option<String>,
-        ssn: Option<String>,
-        license_number: Option<String>,
-        passport_number: Option<String>,
-        username: Option<String>,
-    },
-    SecureNote,
-    SshKey {
-        public_key: Option<String>,
-        fingerprint: Option<String>,
-        private_key: Option<String>,
-    },
-}
-
-#[derive(Debug, Clone, serde::Serialize)]
-#[cfg_attr(test, derive(Eq, PartialEq))]
-struct DecryptedField {
-    name: Option<String>,
-    value: Option<String>,
-    #[serde(serialize_with = "serialize_field_type", rename = "type")]
-    ty: Option<rbw::api::FieldType>,
-}
-
-#[allow(clippy::trivially_copy_pass_by_ref, clippy::ref_option)]
-fn serialize_field_type<S>(
-    ty: &Option<rbw::api::FieldType>,
-    serializer: S,
-) -> Result<S::Ok, S::Error>
-where
-    S: serde::Serializer,
-{
-    match ty {
-        Some(ty) => {
-            let s = match ty {
-                rbw::api::FieldType::Text => "text",
-                rbw::api::FieldType::Hidden => "hidden",
-                rbw::api::FieldType::Boolean => "boolean",
-                rbw::api::FieldType::Linked => "linked",
-            };
-            serializer.serialize_some(&Some(s))
-        }
-        None => serializer.serialize_none(),
-    }
-}
-
-#[derive(Debug, Clone, serde::Serialize)]
-#[cfg_attr(test, derive(Eq, PartialEq))]
-struct DecryptedHistoryEntry {
-    last_used_date: String,
-    password: String,
-}
-
-#[derive(Debug, Clone, serde::Serialize)]
-#[cfg_attr(test, derive(Eq, PartialEq))]
-struct DecryptedUri {
-    uri: String,
-    match_type: Option<rbw::api::UriMatchType>,
-}
-
-fn matches_url(
-    url: &str,
-    match_type: Option<rbw::api::UriMatchType>,
-    given_url: &url::Url,
-) -> bool {
-    match match_type.unwrap_or(rbw::api::UriMatchType::Domain) {
-        rbw::api::UriMatchType::Domain => {
-            let Some(given_host_port) = host_port(given_url) else {
-                return false;
-            };
-            if let Ok(self_url) = url::Url::parse(url) {
-                if let Some(self_host_port) = host_port(&self_url) {
-                    if self_url.scheme() == given_url.scheme()
-                        && (self_host_port == given_host_port
-                            || given_host_port
-                                .ends_with(&format!(".{self_host_port}")))
-                    {
-                        return true;
-                    }
-                }
-            }
-            url == given_host_port
-                || given_host_port.ends_with(&format!(".{url}"))
-        }
-        rbw::api::UriMatchType::Host => {
-            let Some(given_host_port) = host_port(given_url) else {
-                return false;
-            };
-            if let Ok(self_url) = url::Url::parse(url) {
-                if let Some(self_host_port) = host_port(&self_url) {
-                    if self_url.scheme() == given_url.scheme()
-                        && self_host_port == given_host_port
-                    {
-                        return true;
-                    }
-                }
-            }
-            url == given_host_port
-        }
-        rbw::api::UriMatchType::StartsWith => {
-            given_url.to_string().starts_with(url)
-        }
-        rbw::api::UriMatchType::Exact => {
-            if given_url.path() == "/" {
-                given_url.to_string().trim_end_matches('/')
-                    == url.trim_end_matches('/')
-            } else {
-                given_url.to_string() == url
-            }
-        }
-        rbw::api::UriMatchType::RegularExpression => {
-            let Ok(rx) = regex::Regex::new(url) else {
-                return false;
-            };
-            rx.is_match(given_url.as_ref())
-        }
-        rbw::api::UriMatchType::Never => false,
-    }
-}
-
-fn host_port(url: &url::Url) -> Option<String> {
-    let host = url.host_str()?;
-    Some(
-        url.port().map_or_else(
-            || host.to_string(),
-            |port| format!("{host}:{port}"),
-        ),
-    )
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ListField {
     Id,
@@ -1236,44 +786,17 @@ const HELP_FULL: &str = r"
 struct LoginState {
     username: Option<String>,
     password: Option<String>,
+    #[serde(skip)]
     totp: Option<String>,
     uris: Vec<rbw::db::Uri>,
     notes: Option<String>,
 }
 
 impl LoginState {
-    fn encrypt(
-        &self,
-        org_id: Option<&str>,
-    ) -> anyhow::Result<rbw::db::EntryData> {
-        let username =
-            encrypt_optional_string(self.username.as_deref(), org_id)?;
-        let password =
-            encrypt_optional_string(self.password.as_deref(), org_id)?;
-        let totp = encrypt_optional_string(self.totp.as_deref(), org_id)?;
-        let uris = self
-            .uris
-            .iter()
-            .map(|uri| {
-                Ok(rbw::db::Uri {
-                    uri: crate::actions::encrypt(&uri.uri, org_id)?,
-                    match_type: uri.match_type,
-                })
-            })
-            .collect::<anyhow::Result<Vec<_>>>()?;
-
-        Ok(rbw::db::EntryData::Login {
-            username,
-            password,
-            totp,
-            uris,
-        })
-    }
-
     fn edit_legacy(
         mut self,
         input_file: Option<&str>,
-    ) -> anyhow::Result<LoginState> {
+    ) -> anyhow::Result<Self> {
         let contents: String = if let Some(file) = input_file {
             std::fs::read_to_string(file).with_context(|| file.to_string())?
         } else {
@@ -1292,7 +815,7 @@ impl LoginState {
     }
 
     fn edit_full(self, input_file: Option<&str>) -> anyhow::Result<Self> {
-        Ok(if let Some(file) = input_file {
+        let mut res: Self = if let Some(file) = input_file {
             let file = std::fs::File::open(file)
                 .with_context(|| file.to_string())?;
             yaml_serde::from_reader(file)?
@@ -1300,17 +823,10 @@ impl LoginState {
             let contents =
                 rbw::edit::edit(&yaml_serde::to_string(&self)?, HELP_FULL)?;
             yaml_serde::from_str(&contents)?
-        })
+        };
+        res.totp = self.totp;
+        Ok(res)
     }
-}
-
-fn encrypt_optional_string(
-    value: Option<&str>,
-    org_id: Option<&str>,
-) -> anyhow::Result<Option<String>> {
-    value
-        .map(|value| crate::actions::encrypt(value, org_id))
-        .transpose()
 }
 
 pub fn config_show() -> anyhow::Result<()> {
@@ -1414,15 +930,15 @@ pub fn register() -> anyhow::Result<()> {
 
 pub fn login() -> anyhow::Result<()> {
     ensure_agent()?;
-    crate::actions::login()?;
+    client().login()?;
 
     Ok(())
 }
 
 pub fn unlock() -> anyhow::Result<()> {
     ensure_agent()?;
-    crate::actions::login()?;
-    crate::actions::unlock()?;
+    client().login()?;
+    client().unlock()?;
 
     Ok(())
 }
@@ -1431,15 +947,15 @@ pub fn unlocked() -> anyhow::Result<()> {
     // not ensure_agent, because we don't want `rbw unlocked` to start the
     // agent if it's not running
     let _ = check_agent_version();
-    crate::actions::unlocked()?;
+    client().check_lock()?;
 
     Ok(())
 }
 
 pub fn sync() -> anyhow::Result<()> {
     ensure_agent()?;
-    crate::actions::login()?;
-    crate::actions::sync()?;
+    client().login()?;
+    client().sync()?;
 
     Ok(())
 }
@@ -1651,13 +1167,6 @@ pub fn add(
 ) -> anyhow::Result<()> {
     unlock()?;
 
-    let mut db = load_db()?;
-    // unwrap is safe here because the call to unlock above is guaranteed to
-    // populate these or error
-    let mut access_token = db.access_token.as_ref().unwrap().clone();
-    let refresh_token = db.refresh_token.as_ref().unwrap();
-
-    let name = crate::actions::encrypt(name, None)?;
     let login = LoginState {
         username: username.map(std::string::ToString::to_string),
         password: None,
@@ -1676,60 +1185,20 @@ pub fn add(
     } else {
         login.edit_legacy(file)
     }?;
-    let notes = encrypt_optional_string(login.notes.as_deref(), None)?;
-    let data = login.encrypt(None)?;
 
-    let mut folder_id = None;
-    if let Some(folder_name) = folder {
-        let (new_access_token, folders) =
-            rbw::actions::list_folders(&access_token, refresh_token)?;
-        if let Some(new_access_token) = new_access_token {
-            access_token.clone_from(&new_access_token);
-            db.access_token = Some(new_access_token);
-            save_db(&db)?;
-        }
+    let draft = rbw::client::EntryDraft {
+        name: name.to_string(),
+        username: login.username.unwrap_or_default(),
+        password: login.password.unwrap_or_default(),
+        totp: login.totp.unwrap_or_default(),
+        uris: login.uris.iter().map(|u| u.uri.clone()).collect(),
+        folder: folder.unwrap_or_default().to_string(),
+        notes: login.notes.unwrap_or_default(),
+        org_id: None,
+    };
 
-        let folders: Vec<(String, String)> = folders
-            .iter()
-            .cloned()
-            .map(|(id, name)| {
-                Ok((id, crate::actions::decrypt(&name, None, None)?))
-            })
-            .collect::<anyhow::Result<_>>()?;
-
-        for (id, name) in folders {
-            if name == folder_name {
-                folder_id = Some(id);
-            }
-        }
-        if folder_id.is_none() {
-            let (new_access_token, id) = rbw::actions::create_folder(
-                &access_token,
-                refresh_token,
-                &crate::actions::encrypt(folder_name, None)?,
-            )?;
-            if let Some(new_access_token) = new_access_token {
-                access_token.clone_from(&new_access_token);
-                db.access_token = Some(new_access_token);
-                save_db(&db)?;
-            }
-            folder_id = Some(id);
-        }
-    }
-
-    if let (Some(access_token), ()) = rbw::actions::add(
-        &access_token,
-        refresh_token,
-        &name,
-        &data,
-        notes.as_deref(),
-        folder_id.as_deref(),
-    )? {
-        db.access_token = Some(access_token);
-        save_db(&db)?;
-    }
-
-    crate::actions::sync()?;
+    client().add_entry(&draft)?;
+    client().sync()?;
 
     Ok(())
 }
@@ -1748,83 +1217,19 @@ pub fn generate(
     if let Some(name) = name {
         unlock()?;
 
-        let mut db = load_db()?;
-        // unwrap is safe here because the call to unlock above is guaranteed
-        // to populate these or error
-        let mut access_token = db.access_token.as_ref().unwrap().clone();
-        let refresh_token = db.refresh_token.as_ref().unwrap();
+        let draft = rbw::client::EntryDraft {
+            name: name.to_string(),
+            username: username.unwrap_or_default().to_string(),
+            password,
+            totp: String::new(),
+            uris: uris.iter().map(|(uri, _)| uri.clone()).collect(),
+            folder: folder.unwrap_or_default().to_string(),
+            notes: String::new(),
+            org_id: None,
+        };
 
-        let name = crate::actions::encrypt(name, None)?;
-        let username = username
-            .map(|username| crate::actions::encrypt(username, None))
-            .transpose()?;
-        let password = crate::actions::encrypt(&password, None)?;
-        let uris: Vec<_> = uris
-            .iter()
-            .map(|uri| {
-                Ok(rbw::db::Uri {
-                    uri: crate::actions::encrypt(&uri.0, None)?,
-                    match_type: uri.1,
-                })
-            })
-            .collect::<anyhow::Result<_>>()?;
-
-        let mut folder_id = None;
-        if let Some(folder_name) = folder {
-            let (new_access_token, folders) =
-                rbw::actions::list_folders(&access_token, refresh_token)?;
-            if let Some(new_access_token) = new_access_token {
-                access_token.clone_from(&new_access_token);
-                db.access_token = Some(new_access_token);
-                save_db(&db)?;
-            }
-
-            let folders: Vec<(String, String)> = folders
-                .iter()
-                .cloned()
-                .map(|(id, name)| {
-                    Ok((id, crate::actions::decrypt(&name, None, None)?))
-                })
-                .collect::<anyhow::Result<_>>()?;
-
-            for (id, name) in folders {
-                if name == folder_name {
-                    folder_id = Some(id);
-                }
-            }
-            if folder_id.is_none() {
-                let (new_access_token, id) = rbw::actions::create_folder(
-                    &access_token,
-                    refresh_token,
-                    &crate::actions::encrypt(folder_name, None)?,
-                )?;
-                if let Some(new_access_token) = new_access_token {
-                    access_token.clone_from(&new_access_token);
-                    db.access_token = Some(new_access_token);
-                    save_db(&db)?;
-                }
-                folder_id = Some(id);
-            }
-        }
-
-        if let (Some(access_token), ()) = rbw::actions::add(
-            &access_token,
-            refresh_token,
-            &name,
-            &rbw::db::EntryData::Login {
-                username,
-                password: Some(password),
-                uris,
-                totp: None,
-            },
-            None,
-            folder_id.as_deref(),
-        )? {
-            db.access_token = Some(access_token);
-            save_db(&db)?;
-        }
-
-        crate::actions::sync()?;
+        client().add_entry(&draft)?;
+        client().sync()?;
     }
 
     Ok(())
@@ -1840,9 +1245,7 @@ pub fn edit(
 ) -> anyhow::Result<()> {
     unlock()?;
 
-    let mut db = load_db()?;
-    let access_token = db.access_token.as_ref().unwrap();
-    let refresh_token = db.refresh_token.as_ref().unwrap();
+    let db = load_db()?;
 
     let desc = format!(
         "{}{}",
@@ -1854,7 +1257,7 @@ pub fn edit(
         find_entry(&db, name, username, folder, ignore_case)
             .with_context(|| format!("couldn't find entry for '{desc}'"))?;
 
-    let (data, fields, notes, history) = match &decrypted.data {
+    let (data, notes, history) = match &decrypted.data {
         DecryptedData::Login {
             username,
             password,
@@ -1905,16 +1308,25 @@ pub fn edit(
                 };
                 history.insert(0, new_history_entry);
             }
-            let notes = encrypt_optional_string(
-                login.notes.as_deref(),
-                entry.org_id.as_deref(),
-            )?;
-            let data = login.encrypt(entry.org_id.as_deref())?;
-            (data, entry.fields, notes, history)
+
+            let data = DecryptedData::Login {
+                username: login.username,
+                password: login.password,
+                totp: login.totp,
+                uris: Some(
+                    login
+                        .uris
+                        .into_iter()
+                        .map(|u| rbw::decrypted::Uri {
+                            uri: u.uri,
+                            match_type: u.match_type,
+                        })
+                        .collect(),
+                ),
+            };
+            (data, login.notes, history)
         }
         DecryptedData::SecureNote => {
-            let data = rbw::db::EntryData::SecureNote {};
-
             let editor_content = decrypted.notes.map_or_else(
                 || "\n".to_string(),
                 |notes| format!("{notes}\n"),
@@ -1924,13 +1336,7 @@ pub fn edit(
             // prepend blank line to be parsed as pw by `parse_editor`
             let (_, notes) = parse_editor(&format!("\n{contents}\n"));
 
-            let notes = notes
-                .map(|notes| {
-                    crate::actions::encrypt(&notes, entry.org_id.as_deref())
-                })
-                .transpose()?;
-
-            (data, entry.fields, notes, entry.history)
+            (DecryptedData::SecureNote, notes, entry.history.clone())
         }
         _ => {
             return Err(anyhow::anyhow!(
@@ -1939,23 +1345,9 @@ pub fn edit(
         }
     };
 
-    if let (Some(access_token), ()) = rbw::actions::edit(
-        access_token,
-        refresh_token,
-        &entry.id,
-        entry.org_id.as_deref(),
-        &entry.name,
-        &data,
-        &fields,
-        notes.as_deref(),
-        entry.folder_id.as_deref(),
-        &history,
-    )? {
-        db.access_token = Some(access_token);
-        save_db(&db)?;
-    }
+    client().edit_entry(&entry, &data, notes.as_deref(), &history)?;
 
-    crate::actions::sync()?;
+    client().sync()?;
     Ok(())
 }
 
@@ -1967,9 +1359,7 @@ pub fn remove(
 ) -> anyhow::Result<()> {
     unlock()?;
 
-    let mut db = load_db()?;
-    let access_token = db.access_token.as_ref().unwrap();
-    let refresh_token = db.refresh_token.as_ref().unwrap();
+    let db = load_db()?;
 
     let desc = format!(
         "{}{}",
@@ -1980,14 +1370,8 @@ pub fn remove(
     let (entry, _) = find_entry(&db, name, username, folder, ignore_case)
         .with_context(|| format!("couldn't find entry for '{desc}'"))?;
 
-    if let (Some(access_token), ()) =
-        rbw::actions::remove(access_token, refresh_token, &entry.id)?
-    {
-        db.access_token = Some(access_token);
-        save_db(&db)?;
-    }
-
-    crate::actions::sync()?;
+    client().remove_entry(&entry.id)?;
+    client().sync()?;
 
     Ok(())
 }
@@ -2019,7 +1403,7 @@ pub fn history(
 
 pub fn lock() -> anyhow::Result<()> {
     ensure_agent()?;
-    crate::actions::lock()?;
+    client().lock()?;
 
     Ok(())
 }
@@ -2038,42 +1422,23 @@ pub fn stop_agent() -> anyhow::Result<()> {
     Ok(())
 }
 
+fn client() -> rbw::client::Client<rbw::client::AgentClient> {
+    let agent =
+        rbw::client::AgentClient::new(crate::actions::get_environment());
+    rbw::client::Client::new(agent)
+}
+
 fn ensure_agent() -> anyhow::Result<()> {
-    check_config()?;
-    if matches!(check_agent_version(), Ok(())) {
-        return Ok(());
-    }
-    run_agent()?;
-    check_agent_version()?;
-    Ok(())
-}
-
-fn run_agent() -> anyhow::Result<()> {
-    let agent_path = std::env::var_os("RBW_AGENT");
-    let agent_path = agent_path
-        .as_deref()
-        .unwrap_or_else(|| std::ffi::OsStr::from_bytes(b"rbw-agent"));
-    let status = std::process::Command::new(agent_path)
-        .status()
-        .context("failed to run rbw-agent")?;
-    if !status.success() {
-        if let Some(code) = status.code() {
-            if code != 23 {
-                return Err(anyhow::anyhow!(
-                    "failed to run rbw-agent: {status}"
-                ));
-            }
-        }
-    }
-
-    Ok(())
-}
-
-fn check_config() -> anyhow::Result<()> {
     rbw::config::Config::validate().map_err(|e| {
         log::error!("{MISSING_CONFIG_HELP}");
         anyhow::Error::new(e)
-    })
+    })?;
+    if matches!(check_agent_version(), Ok(())) {
+        return Ok(());
+    }
+    rbw::client::run_agent()?;
+    check_agent_version()?;
+    Ok(())
 }
 
 fn check_agent_version() -> anyhow::Result<()> {
@@ -2089,121 +1454,19 @@ fn check_agent_version() -> anyhow::Result<()> {
 }
 
 fn version_or_quit() -> anyhow::Result<u32> {
-    crate::actions::version().inspect_err(|_| {
+    client().version().inspect_err(|_| {
         let _ = crate::actions::quit();
     })
 }
 
 fn find_entry(
     db: &rbw::db::Db,
-    mut needle: Needle,
+    needle: Needle,
     username: Option<&str>,
     folder: Option<&str>,
     ignore_case: bool,
 ) -> anyhow::Result<(rbw::db::Entry, DecryptedCipher)> {
-    if let Needle::Uuid(uuid, s) = needle {
-        for cipher in &db.entries {
-            if uuid::Uuid::parse_str(&cipher.id) == Ok(uuid) {
-                return Ok((cipher.clone(), decrypt_cipher(cipher)?));
-            }
-        }
-        needle = Needle::Name(s);
-    }
-
-    let ciphers: Vec<(rbw::db::Entry, DecryptedSearchCipher)> = db
-        .entries
-        .iter()
-        .map(|entry| {
-            decrypt_search_cipher(entry)
-                .map(|decrypted| (entry.clone(), decrypted))
-        })
-        .collect::<anyhow::Result<_>>()?;
-    let (entry, _) =
-        find_entry_raw(&ciphers, &needle, username, folder, ignore_case)?;
-    let decrypted_entry = decrypt_cipher(&entry)?;
-    Ok((entry, decrypted_entry))
-}
-
-fn find_entry_raw(
-    entries: &[(rbw::db::Entry, DecryptedSearchCipher)],
-    needle: &Needle,
-    username: Option<&str>,
-    folder: Option<&str>,
-    ignore_case: bool,
-) -> anyhow::Result<(rbw::db::Entry, DecryptedSearchCipher)> {
-    let mut matches: Vec<(rbw::db::Entry, DecryptedSearchCipher)> = vec![];
-
-    let find_matches = |strict_username, strict_folder, exact| {
-        entries
-            .iter()
-            .filter(|&(_, decrypted_cipher)| {
-                decrypted_cipher.matches(
-                    needle,
-                    username,
-                    folder,
-                    ignore_case,
-                    strict_username,
-                    strict_folder,
-                    exact,
-                )
-            })
-            .cloned()
-            .collect()
-    };
-
-    for exact in [true, false] {
-        matches = find_matches(true, true, exact);
-        if matches.len() == 1 {
-            return Ok(matches[0].clone());
-        }
-
-        let strict_folder_matches = find_matches(false, true, exact);
-        let strict_username_matches = find_matches(true, false, exact);
-        if strict_folder_matches.len() == 1
-            && strict_username_matches.len() != 1
-        {
-            return Ok(strict_folder_matches[0].clone());
-        } else if strict_folder_matches.len() != 1
-            && strict_username_matches.len() == 1
-        {
-            return Ok(strict_username_matches[0].clone());
-        }
-
-        matches = find_matches(false, false, exact);
-        if matches.len() == 1 {
-            return Ok(matches[0].clone());
-        }
-    }
-
-    if matches.is_empty() {
-        Err(anyhow::anyhow!("no entry found"))
-    } else {
-        let entries: Vec<String> = matches
-            .iter()
-            .map(|(_, decrypted)| decrypted.display_name())
-            .collect();
-        let entries = entries.join(", ");
-        Err(anyhow::anyhow!("multiple entries found: {entries}"))
-    }
-}
-
-fn decrypt_field(
-    name: Field,
-    field: Option<&str>,
-    entry_key: Option<&str>,
-    org_id: Option<&str>,
-) -> Option<String> {
-    let field = field
-        .as_ref()
-        .map(|field| crate::actions::decrypt(field, entry_key, org_id))
-        .transpose();
-    match field {
-        Ok(field) => field,
-        Err(e) => {
-            log::warn!("failed to decrypt {name}: {e}");
-            None
-        }
-    }
+    client().find_entry(db, needle, username, folder, ignore_case)
 }
 
 fn decrypt_list_cipher(
@@ -2212,7 +1475,7 @@ fn decrypt_list_cipher(
 ) -> anyhow::Result<DecryptedListCipher> {
     let id = entry.id.clone();
     let name = if fields.contains(&ListField::Name) {
-        Some(crate::actions::decrypt(
+        Some(client().decrypt(
             &entry.name,
             entry.key.as_deref(),
             entry.org_id.as_deref(),
@@ -2220,10 +1483,24 @@ fn decrypt_list_cipher(
     } else {
         None
     };
+    let try_decrypt = |field: Option<&str>,
+                       entry_key: Option<&str>,
+                       org_id: Option<&str>|
+     -> Option<String> {
+        match field
+            .map(|f| client().decrypt(f, entry_key, org_id))
+            .transpose()
+        {
+            Ok(v) => v,
+            Err(e) => {
+                log::warn!("failed to decrypt field: {e}");
+                None
+            }
+        }
+    };
     let user = if fields.contains(&ListField::User) {
         match &entry.data {
-            rbw::db::EntryData::Login { username, .. } => decrypt_field(
-                Field::Username,
+            rbw::db::EntryData::Login { username, .. } => try_decrypt(
                 username.as_deref(),
                 entry.key.as_deref(),
                 entry.org_id.as_deref(),
@@ -2239,7 +1516,7 @@ fn decrypt_list_cipher(
         entry
             .folder
             .as_ref()
-            .map(|folder| crate::actions::decrypt(folder, None, None))
+            .map(|folder| client().decrypt(folder, None, None))
             .transpose()?
     } else {
         None
@@ -2249,8 +1526,7 @@ fn decrypt_list_cipher(
             rbw::db::EntryData::Login { uris, .. } => Some(
                 uris.iter()
                     .filter_map(|s| {
-                        decrypt_field(
-                            Field::Uris,
+                        try_decrypt(
                             Some(&s.uri),
                             entry.key.as_deref(),
                             entry.org_id.as_deref(),
@@ -2287,427 +1563,7 @@ fn decrypt_list_cipher(
 fn decrypt_search_cipher(
     entry: &rbw::db::Entry,
 ) -> anyhow::Result<DecryptedSearchCipher> {
-    let id = entry.id.clone();
-    let name = crate::actions::decrypt(
-        &entry.name,
-        entry.key.as_deref(),
-        entry.org_id.as_deref(),
-    )?;
-    let user = match &entry.data {
-        rbw::db::EntryData::Login { username, .. } => decrypt_field(
-            Field::Username,
-            username.as_deref(),
-            entry.key.as_deref(),
-            entry.org_id.as_deref(),
-        ),
-        _ => None,
-    };
-    // folder name should always be decrypted with the local key because
-    // folders are local to a specific user's vault, not the organization
-    let folder = entry
-        .folder
-        .as_ref()
-        .map(|folder| crate::actions::decrypt(folder, None, None))
-        .transpose()?;
-    let notes = entry
-        .notes
-        .as_ref()
-        .map(|notes| {
-            crate::actions::decrypt(
-                notes,
-                entry.key.as_deref(),
-                entry.org_id.as_deref(),
-            )
-        })
-        .transpose();
-    let uris = if let rbw::db::EntryData::Login { uris, .. } = &entry.data {
-        uris.iter()
-            .filter_map(|s| {
-                decrypt_field(
-                    Field::Uris,
-                    Some(&s.uri),
-                    entry.key.as_deref(),
-                    entry.org_id.as_deref(),
-                )
-                .map(|uri| (uri, s.match_type))
-            })
-            .collect()
-    } else {
-        vec![]
-    };
-    let fields = entry
-        .fields
-        .iter()
-        .filter_map(|field| {
-            if field.ty == Some(rbw::api::FieldType::Hidden) {
-                None
-            } else {
-                field.value.as_ref()
-            }
-        })
-        .map(|value| {
-            crate::actions::decrypt(
-                value,
-                entry.key.as_deref(),
-                entry.org_id.as_deref(),
-            )
-        })
-        .collect::<anyhow::Result<_>>()?;
-    let notes = match notes {
-        Ok(notes) => notes,
-        Err(e) => {
-            log::warn!("failed to decrypt notes: {e}");
-            None
-        }
-    };
-    let entry_type = (match &entry.data {
-        rbw::db::EntryData::Login { .. } => "Login",
-        rbw::db::EntryData::Identity { .. } => "Identity",
-        rbw::db::EntryData::SshKey { .. } => "SSH Key",
-        rbw::db::EntryData::SecureNote => "Note",
-        rbw::db::EntryData::Card { .. } => "Card",
-    })
-    .to_string();
-
-    Ok(DecryptedSearchCipher {
-        id,
-        entry_type,
-        folder,
-        name,
-        user,
-        uris,
-        fields,
-        notes,
-    })
-}
-
-fn decrypt_cipher(entry: &rbw::db::Entry) -> anyhow::Result<DecryptedCipher> {
-    // folder name should always be decrypted with the local key because
-    // folders are local to a specific user's vault, not the organization
-    let folder = entry
-        .folder
-        .as_ref()
-        .map(|folder| crate::actions::decrypt(folder, None, None))
-        .transpose();
-    let folder = match folder {
-        Ok(folder) => folder,
-        Err(e) => {
-            log::warn!("failed to decrypt folder name: {e}");
-            None
-        }
-    };
-    let fields = entry
-        .fields
-        .iter()
-        .map(|field| {
-            Ok(DecryptedField {
-                name: field
-                    .name
-                    .as_ref()
-                    .map(|name| {
-                        crate::actions::decrypt(
-                            name,
-                            entry.key.as_deref(),
-                            entry.org_id.as_deref(),
-                        )
-                    })
-                    .transpose()?,
-                value: field
-                    .value
-                    .as_ref()
-                    .map(|value| {
-                        crate::actions::decrypt(
-                            value,
-                            entry.key.as_deref(),
-                            entry.org_id.as_deref(),
-                        )
-                    })
-                    .transpose()?,
-                ty: field.ty,
-            })
-        })
-        .collect::<anyhow::Result<_>>()?;
-    let notes = entry
-        .notes
-        .as_ref()
-        .map(|notes| {
-            crate::actions::decrypt(
-                notes,
-                entry.key.as_deref(),
-                entry.org_id.as_deref(),
-            )
-        })
-        .transpose();
-    let notes = match notes {
-        Ok(notes) => notes,
-        Err(e) => {
-            log::warn!("failed to decrypt notes: {e}");
-            None
-        }
-    };
-    let history = entry
-        .history
-        .iter()
-        .map(|history_entry| {
-            Ok(DecryptedHistoryEntry {
-                last_used_date: history_entry.last_used_date.clone(),
-                password: crate::actions::decrypt(
-                    &history_entry.password,
-                    entry.key.as_deref(),
-                    entry.org_id.as_deref(),
-                )?,
-            })
-        })
-        .collect::<anyhow::Result<_>>()?;
-
-    let data = match &entry.data {
-        rbw::db::EntryData::Login {
-            username,
-            password,
-            totp,
-            uris,
-        } => DecryptedData::Login {
-            username: decrypt_field(
-                Field::Username,
-                username.as_deref(),
-                entry.key.as_deref(),
-                entry.org_id.as_deref(),
-            ),
-            password: decrypt_field(
-                Field::Password,
-                password.as_deref(),
-                entry.key.as_deref(),
-                entry.org_id.as_deref(),
-            ),
-            totp: decrypt_field(
-                Field::Totp,
-                totp.as_deref(),
-                entry.key.as_deref(),
-                entry.org_id.as_deref(),
-            ),
-            uris: uris
-                .iter()
-                .map(|s| {
-                    decrypt_field(
-                        Field::Uris,
-                        Some(&s.uri),
-                        entry.key.as_deref(),
-                        entry.org_id.as_deref(),
-                    )
-                    .map(|uri| DecryptedUri {
-                        uri,
-                        match_type: s.match_type,
-                    })
-                })
-                .collect(),
-        },
-        rbw::db::EntryData::Card {
-            cardholder_name,
-            number,
-            brand,
-            exp_month,
-            exp_year,
-            code,
-        } => DecryptedData::Card {
-            cardholder_name: decrypt_field(
-                Field::Cardholder,
-                cardholder_name.as_deref(),
-                entry.key.as_deref(),
-                entry.org_id.as_deref(),
-            ),
-            number: decrypt_field(
-                Field::CardNumber,
-                number.as_deref(),
-                entry.key.as_deref(),
-                entry.org_id.as_deref(),
-            ),
-            brand: decrypt_field(
-                Field::Brand,
-                brand.as_deref(),
-                entry.key.as_deref(),
-                entry.org_id.as_deref(),
-            ),
-            exp_month: decrypt_field(
-                Field::ExpMonth,
-                exp_month.as_deref(),
-                entry.key.as_deref(),
-                entry.org_id.as_deref(),
-            ),
-            exp_year: decrypt_field(
-                Field::ExpYear,
-                exp_year.as_deref(),
-                entry.key.as_deref(),
-                entry.org_id.as_deref(),
-            ),
-            code: decrypt_field(
-                Field::Cvv,
-                code.as_deref(),
-                entry.key.as_deref(),
-                entry.org_id.as_deref(),
-            ),
-        },
-        rbw::db::EntryData::Identity {
-            title,
-            first_name,
-            middle_name,
-            last_name,
-            address1,
-            address2,
-            address3,
-            city,
-            state,
-            postal_code,
-            country,
-            phone,
-            email,
-            ssn,
-            license_number,
-            passport_number,
-            username,
-        } => DecryptedData::Identity {
-            title: decrypt_field(
-                Field::Title,
-                title.as_deref(),
-                entry.key.as_deref(),
-                entry.org_id.as_deref(),
-            ),
-            first_name: decrypt_field(
-                Field::FirstName,
-                first_name.as_deref(),
-                entry.key.as_deref(),
-                entry.org_id.as_deref(),
-            ),
-            middle_name: decrypt_field(
-                Field::MiddleName,
-                middle_name.as_deref(),
-                entry.key.as_deref(),
-                entry.org_id.as_deref(),
-            ),
-            last_name: decrypt_field(
-                Field::LastName,
-                last_name.as_deref(),
-                entry.key.as_deref(),
-                entry.org_id.as_deref(),
-            ),
-            address1: decrypt_field(
-                Field::Address1,
-                address1.as_deref(),
-                entry.key.as_deref(),
-                entry.org_id.as_deref(),
-            ),
-            address2: decrypt_field(
-                Field::Address2,
-                address2.as_deref(),
-                entry.key.as_deref(),
-                entry.org_id.as_deref(),
-            ),
-            address3: decrypt_field(
-                Field::Address3,
-                address3.as_deref(),
-                entry.key.as_deref(),
-                entry.org_id.as_deref(),
-            ),
-            city: decrypt_field(
-                Field::City,
-                city.as_deref(),
-                entry.key.as_deref(),
-                entry.org_id.as_deref(),
-            ),
-            state: decrypt_field(
-                Field::State,
-                state.as_deref(),
-                entry.key.as_deref(),
-                entry.org_id.as_deref(),
-            ),
-            postal_code: decrypt_field(
-                Field::PostalCode,
-                postal_code.as_deref(),
-                entry.key.as_deref(),
-                entry.org_id.as_deref(),
-            ),
-            country: decrypt_field(
-                Field::Country,
-                country.as_deref(),
-                entry.key.as_deref(),
-                entry.org_id.as_deref(),
-            ),
-            phone: decrypt_field(
-                Field::Phone,
-                phone.as_deref(),
-                entry.key.as_deref(),
-                entry.org_id.as_deref(),
-            ),
-            email: decrypt_field(
-                Field::Email,
-                email.as_deref(),
-                entry.key.as_deref(),
-                entry.org_id.as_deref(),
-            ),
-            ssn: decrypt_field(
-                Field::Ssn,
-                ssn.as_deref(),
-                entry.key.as_deref(),
-                entry.org_id.as_deref(),
-            ),
-            license_number: decrypt_field(
-                Field::License,
-                license_number.as_deref(),
-                entry.key.as_deref(),
-                entry.org_id.as_deref(),
-            ),
-            passport_number: decrypt_field(
-                Field::Passport,
-                passport_number.as_deref(),
-                entry.key.as_deref(),
-                entry.org_id.as_deref(),
-            ),
-            username: decrypt_field(
-                Field::Username,
-                username.as_deref(),
-                entry.key.as_deref(),
-                entry.org_id.as_deref(),
-            ),
-        },
-        rbw::db::EntryData::SecureNote => DecryptedData::SecureNote {},
-        rbw::db::EntryData::SshKey {
-            public_key,
-            fingerprint,
-            private_key,
-        } => DecryptedData::SshKey {
-            public_key: decrypt_field(
-                Field::PublicKey,
-                public_key.as_deref(),
-                entry.key.as_deref(),
-                entry.org_id.as_deref(),
-            ),
-            fingerprint: decrypt_field(
-                Field::Fingerprint,
-                fingerprint.as_deref(),
-                entry.key.as_deref(),
-                entry.org_id.as_deref(),
-            ),
-            private_key: decrypt_field(
-                Field::PrivateKey,
-                private_key.as_deref(),
-                entry.key.as_deref(),
-                entry.org_id.as_deref(),
-            ),
-        },
-    };
-
-    Ok(DecryptedCipher {
-        id: entry.id.clone(),
-        folder,
-        name: crate::actions::decrypt(
-            &entry.name,
-            entry.key.as_deref(),
-            entry.org_id.as_deref(),
-        )?,
-        data,
-        fields,
-        notes,
-        history,
-    })
+    client().decrypt_search_entry(entry)
 }
 
 fn parse_editor(contents: &str) -> (Option<String>, Option<String>) {
@@ -2732,25 +1588,7 @@ fn parse_editor(contents: &str) -> (Option<String>, Option<String>) {
 }
 
 fn load_db() -> anyhow::Result<rbw::db::Db> {
-    let config = rbw::config::Config::load()?;
-    config.email.as_ref().map_or_else(
-        || Err(anyhow::anyhow!("failed to find email address in config")),
-        |email| {
-            rbw::db::Db::load(&config.server_name(), email)
-                .map_err(anyhow::Error::new)
-        },
-    )
-}
-
-fn save_db(db: &rbw::db::Db) -> anyhow::Result<()> {
-    let config = rbw::config::Config::load()?;
-    config.email.as_ref().map_or_else(
-        || Err(anyhow::anyhow!("failed to find email address in config")),
-        |email| {
-            db.save(&config.server_name(), email)
-                .map_err(anyhow::Error::new)
-        },
-    )
+    client().load_db()
 }
 
 fn remove_db() -> anyhow::Result<()> {
@@ -2900,1363 +1738,9 @@ mod test {
     use super::*;
 
     #[test]
-    fn test_find_entry() {
-        let entries = &[
-            make_entry("github", Some("foo"), None, &[]),
-            make_entry("gitlab", Some("foo"), None, &[]),
-            make_entry("gitlab", Some("bar"), None, &[]),
-            make_entry("gitter", Some("baz"), None, &[]),
-            make_entry("git", Some("foo"), None, &[]),
-            make_entry("bitwarden", None, None, &[]),
-            make_entry("github", Some("foo"), Some("websites"), &[]),
-            make_entry("github", Some("foo"), Some("ssh"), &[]),
-            make_entry("github", Some("root"), Some("ssh"), &[]),
-            make_entry("codeberg", Some("foo"), None, &[]),
-            make_entry("codeberg", None, None, &[]),
-            make_entry("1password", Some("foo"), None, &[]),
-            make_entry("1password", None, Some("foo"), &[]),
-        ];
-
-        assert!(
-            one_match(entries, "github", Some("foo"), None, 0, false),
-            "foo@github"
-        );
-        assert!(
-            one_match(entries, "GITHUB", Some("foo"), None, 0, true),
-            "foo@GITHUB"
-        );
-        assert!(one_match(entries, "github", None, None, 0, false), "github");
-        assert!(one_match(entries, "GITHUB", None, None, 0, true), "GITHUB");
-        assert!(
-            one_match(entries, "gitlab", Some("foo"), None, 1, false),
-            "foo@gitlab"
-        );
-        assert!(
-            one_match(entries, "GITLAB", Some("foo"), None, 1, true),
-            "foo@GITLAB"
-        );
-        assert!(
-            one_match(entries, "git", Some("bar"), None, 2, false),
-            "bar@git"
-        );
-        assert!(
-            one_match(entries, "GIT", Some("bar"), None, 2, true),
-            "bar@GIT"
-        );
-        assert!(
-            one_match(entries, "gitter", Some("ba"), None, 3, false),
-            "ba@gitter"
-        );
-        assert!(
-            one_match(entries, "GITTER", Some("ba"), None, 3, true),
-            "ba@GITTER"
-        );
-        assert!(
-            one_match(entries, "git", Some("foo"), None, 4, false),
-            "foo@git"
-        );
-        assert!(
-            one_match(entries, "GIT", Some("foo"), None, 4, true),
-            "foo@GIT"
-        );
-        assert!(one_match(entries, "git", None, None, 4, false), "git");
-        assert!(one_match(entries, "GIT", None, None, 4, true), "GIT");
-        assert!(
-            one_match(entries, "bitwarden", None, None, 5, false),
-            "bitwarden"
-        );
-        assert!(
-            one_match(entries, "BITWARDEN", None, None, 5, true),
-            "BITWARDEN"
-        );
-        assert!(
-            one_match(
-                entries,
-                "github",
-                Some("foo"),
-                Some("websites"),
-                6,
-                false
-            ),
-            "websites/foo@github"
-        );
-        assert!(
-            one_match(
-                entries,
-                "GITHUB",
-                Some("foo"),
-                Some("websites"),
-                6,
-                true
-            ),
-            "websites/foo@GITHUB"
-        );
-        assert!(
-            one_match(entries, "github", Some("foo"), Some("ssh"), 7, false),
-            "ssh/foo@github"
-        );
-        assert!(
-            one_match(entries, "GITHUB", Some("foo"), Some("ssh"), 7, true),
-            "ssh/foo@GITHUB"
-        );
-        assert!(
-            one_match(entries, "github", Some("root"), None, 8, false),
-            "ssh/root@github"
-        );
-        assert!(
-            one_match(entries, "GITHUB", Some("root"), None, 8, true),
-            "ssh/root@GITHUB"
-        );
-
-        assert!(
-            no_matches(entries, "gitlab", Some("baz"), None, false),
-            "baz@gitlab"
-        );
-        assert!(
-            no_matches(entries, "GITLAB", Some("baz"), None, true),
-            "baz@"
-        );
-        assert!(
-            no_matches(entries, "bitbucket", Some("foo"), None, false),
-            "foo@bitbucket"
-        );
-        assert!(
-            no_matches(entries, "BITBUCKET", Some("foo"), None, true),
-            "foo@BITBUCKET"
-        );
-        assert!(
-            no_matches(entries, "github", Some("foo"), Some("bar"), false),
-            "bar/foo@github"
-        );
-        assert!(
-            no_matches(entries, "GITHUB", Some("foo"), Some("bar"), true),
-            "bar/foo@"
-        );
-        assert!(
-            no_matches(entries, "gitlab", Some("foo"), Some("bar"), false),
-            "bar/foo@gitlab"
-        );
-        assert!(
-            no_matches(entries, "GITLAB", Some("foo"), Some("bar"), true),
-            "bar/foo@GITLAB"
-        );
-
-        assert!(many_matches(entries, "gitlab", None, None, false), "gitlab");
-        assert!(many_matches(entries, "gitlab", None, None, true), "GITLAB");
-        assert!(
-            many_matches(entries, "gi", Some("foo"), None, false),
-            "foo@gi"
-        );
-        assert!(
-            many_matches(entries, "GI", Some("foo"), None, true),
-            "foo@GI"
-        );
-        assert!(
-            many_matches(entries, "git", Some("ba"), None, false),
-            "ba@git"
-        );
-        assert!(
-            many_matches(entries, "GIT", Some("ba"), None, true),
-            "ba@GIT"
-        );
-        assert!(
-            many_matches(entries, "github", Some("foo"), Some("s"), false),
-            "s/foo@github"
-        );
-        assert!(
-            many_matches(entries, "GITHUB", Some("foo"), Some("s"), true),
-            "s/foo@GITHUB"
-        );
-
-        assert!(
-            one_match(entries, "codeberg", Some("foo"), None, 9, false),
-            "foo@codeberg"
-        );
-        assert!(
-            one_match(entries, "codeberg", None, None, 10, false),
-            "codeberg"
-        );
-        assert!(
-            no_matches(entries, "codeberg", Some("bar"), None, false),
-            "bar@codeberg"
-        );
-
-        assert!(
-            many_matches(entries, "1password", None, None, false),
-            "1password"
-        );
-    }
-
-    #[test]
-    fn test_find_by_uuid() {
-        let entries = &[
-            make_entry("github", Some("foo"), None, &[]),
-            make_entry("gitlab", Some("foo"), None, &[]),
-            make_entry("gitlab", Some("bar"), None, &[]),
-            make_entry(
-                "12345678-1234-1234-1234-1234567890ab",
-                None,
-                None,
-                &[],
-            ),
-            make_entry(
-                "12345678-1234-1234-1234-1234567890AC",
-                None,
-                None,
-                &[],
-            ),
-            make_entry("123456781234123412341234567890AD", None, None, &[]),
-        ];
-
-        assert!(
-            one_match(entries, &entries[0].0.id, None, None, 0, false),
-            "foo@github"
-        );
-        assert!(
-            one_match(entries, &entries[1].0.id, None, None, 1, false),
-            "foo@gitlab"
-        );
-        assert!(
-            one_match(entries, &entries[2].0.id, None, None, 2, false),
-            "bar@gitlab"
-        );
-
-        assert!(
-            one_match(
-                entries,
-                &entries[0].0.id.to_uppercase(),
-                None,
-                None,
-                0,
-                false
-            ),
-            "foo@github"
-        );
-        assert!(
-            one_match(
-                entries,
-                &entries[0].0.id.to_lowercase(),
-                None,
-                None,
-                0,
-                false
-            ),
-            "foo@github"
-        );
-
-        assert!(one_match(entries, &entries[3].0.id, None, None, 3, false));
-        assert!(one_match(
-            entries,
-            "12345678-1234-1234-1234-1234567890ab",
-            None,
-            None,
-            3,
-            false
-        ));
-        assert!(no_matches(
-            entries,
-            "12345678-1234-1234-1234-1234567890AB",
-            None,
-            None,
-            false
-        ));
-        assert!(one_match(
-            entries,
-            "12345678-1234-1234-1234-1234567890AB",
-            None,
-            None,
-            3,
-            true
-        ));
-        assert!(one_match(entries, &entries[4].0.id, None, None, 4, false));
-        assert!(one_match(
-            entries,
-            "12345678-1234-1234-1234-1234567890AC",
-            None,
-            None,
-            4,
-            false
-        ));
-        assert!(one_match(entries, &entries[5].0.id, None, None, 5, false));
-        assert!(one_match(
-            entries,
-            "123456781234123412341234567890AD",
-            None,
-            None,
-            5,
-            false
-        ));
-    }
-
-    #[test]
-    fn test_find_by_url_default() {
-        let entries = &[
-            make_entry("one", None, None, &[("https://one.com/", None)]),
-            make_entry("two", None, None, &[("https://two.com/login", None)]),
-            make_entry(
-                "three",
-                None,
-                None,
-                &[("https://login.three.com/", None)],
-            ),
-            make_entry("four", None, None, &[("four.com", None)]),
-            make_entry(
-                "five",
-                None,
-                None,
-                &[("https://five.com:8080/", None)],
-            ),
-            make_entry("six", None, None, &[("six.com:8080", None)]),
-            make_entry("seven", None, None, &[("192.168.0.128:8080", None)]),
-        ];
-
-        assert!(
-            one_match(entries, "https://one.com/", None, None, 0, false),
-            "one"
-        );
-        assert!(
-            one_match(
-                entries,
-                "https://login.one.com/",
-                None,
-                None,
-                0,
-                false
-            ),
-            "one"
-        );
-        assert!(
-            one_match(entries, "https://one.com:443/", None, None, 0, false),
-            "one"
-        );
-        assert!(no_matches(entries, "one.com", None, None, false), "one");
-        assert!(no_matches(entries, "https", None, None, false), "one");
-        assert!(no_matches(entries, "com", None, None, false), "one");
-        assert!(
-            no_matches(entries, "https://com/", None, None, false),
-            "one"
-        );
-
-        assert!(
-            one_match(entries, "https://two.com/", None, None, 1, false),
-            "two"
-        );
-        assert!(
-            one_match(
-                entries,
-                "https://two.com/other-page",
-                None,
-                None,
-                1,
-                false
-            ),
-            "two"
-        );
-
-        assert!(
-            one_match(
-                entries,
-                "https://login.three.com/",
-                None,
-                None,
-                2,
-                false
-            ),
-            "three"
-        );
-        assert!(
-            no_matches(entries, "https://three.com/", None, None, false),
-            "three"
-        );
-
-        assert!(
-            one_match(entries, "https://four.com/", None, None, 3, false),
-            "four"
-        );
-
-        assert!(
-            one_match(
-                entries,
-                "https://five.com:8080/",
-                None,
-                None,
-                4,
-                false
-            ),
-            "five"
-        );
-        assert!(
-            no_matches(entries, "https://five.com/", None, None, false),
-            "five"
-        );
-
-        assert!(
-            one_match(entries, "https://six.com:8080/", None, None, 5, false),
-            "six"
-        );
-        assert!(
-            no_matches(entries, "https://six.com/", None, None, false),
-            "six"
-        );
-        assert!(
-            one_match(
-                entries,
-                "https://192.168.0.128:8080/",
-                None,
-                None,
-                6,
-                false
-            ),
-            "seven"
-        );
-        assert!(
-            no_matches(entries, "https://192.168.0.128/", None, None, false),
-            "seven"
-        );
-    }
-
-    #[test]
-    fn test_find_by_url_domain() {
-        let entries = &[
-            make_entry(
-                "one",
-                None,
-                None,
-                &[("https://one.com/", Some(rbw::api::UriMatchType::Domain))],
-            ),
-            make_entry(
-                "two",
-                None,
-                None,
-                &[(
-                    "https://two.com/login",
-                    Some(rbw::api::UriMatchType::Domain),
-                )],
-            ),
-            make_entry(
-                "three",
-                None,
-                None,
-                &[(
-                    "https://login.three.com/",
-                    Some(rbw::api::UriMatchType::Domain),
-                )],
-            ),
-            make_entry(
-                "four",
-                None,
-                None,
-                &[("four.com", Some(rbw::api::UriMatchType::Domain))],
-            ),
-            make_entry(
-                "five",
-                None,
-                None,
-                &[(
-                    "https://five.com:8080/",
-                    Some(rbw::api::UriMatchType::Domain),
-                )],
-            ),
-            make_entry(
-                "six",
-                None,
-                None,
-                &[("six.com:8080", Some(rbw::api::UriMatchType::Domain))],
-            ),
-            make_entry(
-                "seven",
-                None,
-                None,
-                &[(
-                    "192.168.0.128:8080",
-                    Some(rbw::api::UriMatchType::Domain),
-                )],
-            ),
-        ];
-
-        assert!(
-            one_match(entries, "https://one.com/", None, None, 0, false),
-            "one"
-        );
-        assert!(
-            one_match(
-                entries,
-                "https://login.one.com/",
-                None,
-                None,
-                0,
-                false
-            ),
-            "one"
-        );
-        assert!(
-            one_match(entries, "https://one.com:443/", None, None, 0, false),
-            "one"
-        );
-        assert!(no_matches(entries, "one.com", None, None, false), "one");
-        assert!(no_matches(entries, "https", None, None, false), "one");
-        assert!(no_matches(entries, "com", None, None, false), "one");
-        assert!(
-            no_matches(entries, "https://com/", None, None, false),
-            "one"
-        );
-
-        assert!(
-            one_match(entries, "https://two.com/", None, None, 1, false),
-            "two"
-        );
-        assert!(
-            one_match(
-                entries,
-                "https://two.com/other-page",
-                None,
-                None,
-                1,
-                false
-            ),
-            "two"
-        );
-
-        assert!(
-            one_match(
-                entries,
-                "https://login.three.com/",
-                None,
-                None,
-                2,
-                false
-            ),
-            "three"
-        );
-        assert!(
-            no_matches(entries, "https://three.com/", None, None, false),
-            "three"
-        );
-
-        assert!(
-            one_match(entries, "https://four.com/", None, None, 3, false),
-            "four"
-        );
-
-        assert!(
-            one_match(
-                entries,
-                "https://five.com:8080/",
-                None,
-                None,
-                4,
-                false
-            ),
-            "five"
-        );
-        assert!(
-            no_matches(entries, "https://five.com/", None, None, false),
-            "five"
-        );
-
-        assert!(
-            one_match(entries, "https://six.com:8080/", None, None, 5, false),
-            "six"
-        );
-        assert!(
-            no_matches(entries, "https://six.com/", None, None, false),
-            "six"
-        );
-        assert!(
-            one_match(
-                entries,
-                "https://192.168.0.128:8080/",
-                None,
-                None,
-                6,
-                false
-            ),
-            "seven"
-        );
-        assert!(
-            no_matches(entries, "https://192.168.0.128/", None, None, false),
-            "seven"
-        );
-    }
-
-    #[test]
-    fn test_find_by_url_host() {
-        let entries = &[
-            make_entry(
-                "one",
-                None,
-                None,
-                &[("https://one.com/", Some(rbw::api::UriMatchType::Host))],
-            ),
-            make_entry(
-                "two",
-                None,
-                None,
-                &[(
-                    "https://two.com/login",
-                    Some(rbw::api::UriMatchType::Host),
-                )],
-            ),
-            make_entry(
-                "three",
-                None,
-                None,
-                &[(
-                    "https://login.three.com/",
-                    Some(rbw::api::UriMatchType::Host),
-                )],
-            ),
-            make_entry(
-                "four",
-                None,
-                None,
-                &[("four.com", Some(rbw::api::UriMatchType::Host))],
-            ),
-            make_entry(
-                "five",
-                None,
-                None,
-                &[(
-                    "https://five.com:8080/",
-                    Some(rbw::api::UriMatchType::Host),
-                )],
-            ),
-            make_entry(
-                "six",
-                None,
-                None,
-                &[("six.com:8080", Some(rbw::api::UriMatchType::Host))],
-            ),
-            make_entry(
-                "seven",
-                None,
-                None,
-                &[("192.168.0.128:8080", Some(rbw::api::UriMatchType::Host))],
-            ),
-        ];
-
-        assert!(
-            one_match(entries, "https://one.com/", None, None, 0, false),
-            "one"
-        );
-        assert!(
-            no_matches(entries, "https://login.one.com/", None, None, false),
-            "one"
-        );
-        assert!(
-            one_match(entries, "https://one.com:443/", None, None, 0, false),
-            "one"
-        );
-        assert!(no_matches(entries, "one.com", None, None, false), "one");
-        assert!(no_matches(entries, "https", None, None, false), "one");
-        assert!(no_matches(entries, "com", None, None, false), "one");
-        assert!(
-            no_matches(entries, "https://com/", None, None, false),
-            "one"
-        );
-
-        assert!(
-            one_match(entries, "https://two.com/", None, None, 1, false),
-            "two"
-        );
-        assert!(
-            one_match(
-                entries,
-                "https://two.com/other-page",
-                None,
-                None,
-                1,
-                false
-            ),
-            "two"
-        );
-
-        assert!(
-            one_match(
-                entries,
-                "https://login.three.com/",
-                None,
-                None,
-                2,
-                false
-            ),
-            "three"
-        );
-        assert!(
-            no_matches(entries, "https://three.com/", None, None, false),
-            "three"
-        );
-
-        assert!(
-            one_match(entries, "https://four.com/", None, None, 3, false),
-            "four"
-        );
-
-        assert!(
-            one_match(
-                entries,
-                "https://five.com:8080/",
-                None,
-                None,
-                4,
-                false
-            ),
-            "five"
-        );
-        assert!(
-            no_matches(entries, "https://five.com/", None, None, false),
-            "five"
-        );
-
-        assert!(
-            one_match(entries, "https://six.com:8080/", None, None, 5, false),
-            "six"
-        );
-        assert!(
-            no_matches(entries, "https://six.com/", None, None, false),
-            "six"
-        );
-        assert!(
-            one_match(
-                entries,
-                "https://192.168.0.128:8080/",
-                None,
-                None,
-                6,
-                false
-            ),
-            "seven"
-        );
-        assert!(
-            no_matches(entries, "https://192.168.0.128/", None, None, false),
-            "seven"
-        );
-    }
-
-    #[test]
-    fn test_find_by_url_starts_with() {
-        let entries = &[
-            make_entry(
-                "one",
-                None,
-                None,
-                &[(
-                    "https://one.com/",
-                    Some(rbw::api::UriMatchType::StartsWith),
-                )],
-            ),
-            make_entry(
-                "two",
-                None,
-                None,
-                &[(
-                    "https://two.com/login",
-                    Some(rbw::api::UriMatchType::StartsWith),
-                )],
-            ),
-            make_entry(
-                "three",
-                None,
-                None,
-                &[(
-                    "https://login.three.com/",
-                    Some(rbw::api::UriMatchType::StartsWith),
-                )],
-            ),
-        ];
-
-        assert!(
-            one_match(entries, "https://one.com/", None, None, 0, false),
-            "one"
-        );
-        assert!(
-            no_matches(entries, "https://login.one.com/", None, None, false),
-            "one"
-        );
-        assert!(
-            one_match(entries, "https://one.com:443/", None, None, 0, false),
-            "one"
-        );
-        assert!(no_matches(entries, "one.com", None, None, false), "one");
-        assert!(no_matches(entries, "https", None, None, false), "one");
-        assert!(no_matches(entries, "com", None, None, false), "one");
-        assert!(
-            no_matches(entries, "https://com/", None, None, false),
-            "one"
-        );
-
-        assert!(
-            one_match(entries, "https://two.com/login", None, None, 1, false),
-            "two"
-        );
-        assert!(
-            one_match(
-                entries,
-                "https://two.com/login/sso",
-                None,
-                None,
-                1,
-                false
-            ),
-            "two"
-        );
-        assert!(
-            no_matches(entries, "https://two.com/", None, None, false),
-            "two"
-        );
-        assert!(
-            no_matches(
-                entries,
-                "https://two.com/other-page",
-                None,
-                None,
-                false
-            ),
-            "two"
-        );
-
-        assert!(
-            one_match(
-                entries,
-                "https://login.three.com/",
-                None,
-                None,
-                2,
-                false
-            ),
-            "three"
-        );
-        assert!(
-            no_matches(entries, "https://three.com/", None, None, false),
-            "three"
-        );
-    }
-
-    #[test]
-    fn test_find_by_url_exact() {
-        let entries = &[
-            make_entry(
-                "one",
-                None,
-                None,
-                &[("https://one.com/", Some(rbw::api::UriMatchType::Exact))],
-            ),
-            make_entry(
-                "two",
-                None,
-                None,
-                &[(
-                    "https://two.com/login",
-                    Some(rbw::api::UriMatchType::Exact),
-                )],
-            ),
-            make_entry(
-                "three",
-                None,
-                None,
-                &[(
-                    "https://login.three.com/",
-                    Some(rbw::api::UriMatchType::Exact),
-                )],
-            ),
-            make_entry(
-                "four",
-                None,
-                None,
-                &[("https://four.com", Some(rbw::api::UriMatchType::Exact))],
-            ),
-        ];
-
-        assert!(
-            one_match(entries, "https://one.com/", None, None, 0, false),
-            "one"
-        );
-        assert!(
-            one_match(entries, "https://one.com", None, None, 0, false),
-            "one"
-        );
-        assert!(
-            no_matches(entries, "https://one.com/foo", None, None, false),
-            "one"
-        );
-        assert!(
-            no_matches(entries, "https://login.one.com/", None, None, false),
-            "one"
-        );
-        assert!(
-            one_match(entries, "https://one.com:443/", None, None, 0, false),
-            "one"
-        );
-        assert!(no_matches(entries, "one.com", None, None, false), "one");
-        assert!(no_matches(entries, "https", None, None, false), "one");
-        assert!(no_matches(entries, "com", None, None, false), "one");
-        assert!(
-            no_matches(entries, "https://com/", None, None, false),
-            "one"
-        );
-
-        assert!(
-            one_match(entries, "https://two.com/login", None, None, 1, false),
-            "two"
-        );
-        assert!(
-            no_matches(
-                entries,
-                "https://two.com/login/sso",
-                None,
-                None,
-                false
-            ),
-            "two"
-        );
-        assert!(
-            no_matches(entries, "https://two.com/", None, None, false),
-            "two"
-        );
-        assert!(
-            no_matches(
-                entries,
-                "https://two.com/other-page",
-                None,
-                None,
-                false
-            ),
-            "two"
-        );
-
-        assert!(
-            one_match(
-                entries,
-                "https://login.three.com/",
-                None,
-                None,
-                2,
-                false
-            ),
-            "three"
-        );
-        assert!(
-            no_matches(entries, "https://three.com/", None, None, false),
-            "three"
-        );
-        assert!(
-            one_match(entries, "https://four.com/", None, None, 3, false),
-            "four"
-        );
-        assert!(
-            one_match(entries, "https://four.com", None, None, 3, false),
-            "four"
-        );
-        assert!(
-            no_matches(entries, "https://four.com/foo", None, None, false),
-            "four"
-        );
-    }
-
-    #[test]
-    fn test_find_by_url_regex() {
-        let entries = &[
-            make_entry(
-                "one",
-                None,
-                None,
-                &[(
-                    r"^https://one\.com/$",
-                    Some(rbw::api::UriMatchType::RegularExpression),
-                )],
-            ),
-            make_entry(
-                "two",
-                None,
-                None,
-                &[(
-                    r"^https://two\.com/(login|start)",
-                    Some(rbw::api::UriMatchType::RegularExpression),
-                )],
-            ),
-            make_entry(
-                "three",
-                None,
-                None,
-                &[(
-                    r"^https://(login\.)?three\.com/$",
-                    Some(rbw::api::UriMatchType::RegularExpression),
-                )],
-            ),
-        ];
-
-        assert!(
-            one_match(entries, "https://one.com/", None, None, 0, false),
-            "one"
-        );
-        assert!(
-            no_matches(entries, "https://login.one.com/", None, None, false),
-            "one"
-        );
-        assert!(
-            one_match(entries, "https://one.com:443/", None, None, 0, false),
-            "one"
-        );
-        assert!(no_matches(entries, "one.com", None, None, false), "one");
-        assert!(no_matches(entries, "https", None, None, false), "one");
-        assert!(no_matches(entries, "com", None, None, false), "one");
-        assert!(
-            no_matches(entries, "https://com/", None, None, false),
-            "one"
-        );
-
-        assert!(
-            one_match(entries, "https://two.com/login", None, None, 1, false),
-            "two"
-        );
-        assert!(
-            one_match(entries, "https://two.com/start", None, None, 1, false),
-            "two"
-        );
-        assert!(
-            one_match(
-                entries,
-                "https://two.com/login/sso",
-                None,
-                None,
-                1,
-                false
-            ),
-            "two"
-        );
-        assert!(
-            no_matches(entries, "https://two.com/", None, None, false),
-            "two"
-        );
-        assert!(
-            no_matches(
-                entries,
-                "https://two.com/other-page",
-                None,
-                None,
-                false
-            ),
-            "two"
-        );
-
-        assert!(
-            one_match(
-                entries,
-                "https://login.three.com/",
-                None,
-                None,
-                2,
-                false
-            ),
-            "three"
-        );
-        assert!(
-            one_match(entries, "https://three.com/", None, None, 2, false),
-            "three"
-        );
-        assert!(
-            no_matches(entries, "https://www.three.com/", None, None, false),
-            "three"
-        );
-    }
-
-    #[test]
-    fn test_find_by_url_never() {
-        let entries = &[
-            make_entry(
-                "one",
-                None,
-                None,
-                &[("https://one.com/", Some(rbw::api::UriMatchType::Never))],
-            ),
-            make_entry(
-                "two",
-                None,
-                None,
-                &[(
-                    "https://two.com/login",
-                    Some(rbw::api::UriMatchType::Never),
-                )],
-            ),
-            make_entry(
-                "three",
-                None,
-                None,
-                &[(
-                    "https://login.three.com/",
-                    Some(rbw::api::UriMatchType::Never),
-                )],
-            ),
-            make_entry(
-                "four",
-                None,
-                None,
-                &[("four.com", Some(rbw::api::UriMatchType::Never))],
-            ),
-            make_entry(
-                "five",
-                None,
-                None,
-                &[(
-                    "https://five.com:8080/",
-                    Some(rbw::api::UriMatchType::Never),
-                )],
-            ),
-            make_entry(
-                "six",
-                None,
-                None,
-                &[("six.com:8080", Some(rbw::api::UriMatchType::Never))],
-            ),
-        ];
-
-        assert!(
-            no_matches(entries, "https://one.com/", None, None, false),
-            "one"
-        );
-        assert!(
-            no_matches(entries, "https://login.one.com/", None, None, false),
-            "one"
-        );
-        assert!(
-            no_matches(entries, "https://one.com:443/", None, None, false),
-            "one"
-        );
-        assert!(no_matches(entries, "one.com", None, None, false), "one");
-        assert!(no_matches(entries, "https", None, None, false), "one");
-        assert!(no_matches(entries, "com", None, None, false), "one");
-        assert!(
-            no_matches(entries, "https://com/", None, None, false),
-            "one"
-        );
-
-        assert!(
-            no_matches(entries, "https://two.com/", None, None, false),
-            "two"
-        );
-        assert!(
-            no_matches(
-                entries,
-                "https://two.com/other-page",
-                None,
-                None,
-                false
-            ),
-            "two"
-        );
-
-        assert!(
-            no_matches(
-                entries,
-                "https://login.three.com/",
-                None,
-                None,
-                false
-            ),
-            "three"
-        );
-        assert!(
-            no_matches(entries, "https://three.com/", None, None, false),
-            "three"
-        );
-
-        assert!(
-            no_matches(entries, "https://four.com/", None, None, false),
-            "four"
-        );
-
-        assert!(
-            no_matches(entries, "https://five.com:8080/", None, None, false),
-            "five"
-        );
-        assert!(
-            no_matches(entries, "https://five.com/", None, None, false),
-            "five"
-        );
-
-        assert!(
-            no_matches(entries, "https://six.com:8080/", None, None, false),
-            "six"
-        );
-        assert!(
-            no_matches(entries, "https://six.com/", None, None, false),
-            "six"
-        );
-    }
-
-    #[test]
-    fn test_find_with_multiple_urls() {
-        let entries = &[
-            make_entry(
-                "one",
-                None,
-                None,
-                &[
-                    (
-                        "https://one.com/",
-                        Some(rbw::api::UriMatchType::Domain),
-                    ),
-                    (
-                        "https://two.com/",
-                        Some(rbw::api::UriMatchType::Domain),
-                    ),
-                ],
-            ),
-            make_entry(
-                "two",
-                None,
-                None,
-                &[(
-                    "https://two.com/login",
-                    Some(rbw::api::UriMatchType::Domain),
-                )],
-            ),
-        ];
-
-        assert!(
-            no_matches(entries, "https://zero.com/", None, None, false),
-            "zero"
-        );
-        assert!(
-            one_match(entries, "https://one.com/", None, None, 0, false),
-            "one"
-        );
-        assert!(
-            many_matches(entries, "https://two.com/", None, None, false),
-            "two"
-        );
-    }
-
-    #[test]
     fn test_decode_totp_secret() {
         let decoded = decode_totp_secret("NBSW Y3DP EB3W 64TM MQQQ").unwrap();
         let want = b"hello world!".to_vec();
         assert!(decoded == want, "strips spaces");
-    }
-
-    #[track_caller]
-    fn one_match(
-        entries: &[(rbw::db::Entry, DecryptedSearchCipher)],
-        needle: &str,
-        username: Option<&str>,
-        folder: Option<&str>,
-        idx: usize,
-        ignore_case: bool,
-    ) -> bool {
-        entries_eq(
-            &find_entry_raw(
-                entries,
-                &parse_needle(needle).unwrap(),
-                username,
-                folder,
-                ignore_case,
-            )
-            .unwrap(),
-            &entries[idx],
-        )
-    }
-
-    #[track_caller]
-    fn no_matches(
-        entries: &[(rbw::db::Entry, DecryptedSearchCipher)],
-        needle: &str,
-        username: Option<&str>,
-        folder: Option<&str>,
-        ignore_case: bool,
-    ) -> bool {
-        let res = find_entry_raw(
-            entries,
-            &parse_needle(needle).unwrap(),
-            username,
-            folder,
-            ignore_case,
-        );
-        if let Err(e) = res {
-            format!("{e}").contains("no entry found")
-        } else {
-            false
-        }
-    }
-
-    #[track_caller]
-    fn many_matches(
-        entries: &[(rbw::db::Entry, DecryptedSearchCipher)],
-        needle: &str,
-        username: Option<&str>,
-        folder: Option<&str>,
-        ignore_case: bool,
-    ) -> bool {
-        let res = find_entry_raw(
-            entries,
-            &parse_needle(needle).unwrap(),
-            username,
-            folder,
-            ignore_case,
-        );
-        if let Err(e) = res {
-            format!("{e}").contains("multiple entries found")
-        } else {
-            false
-        }
-    }
-
-    #[track_caller]
-    fn entries_eq(
-        a: &(rbw::db::Entry, DecryptedSearchCipher),
-        b: &(rbw::db::Entry, DecryptedSearchCipher),
-    ) -> bool {
-        a.0 == b.0 && a.1 == b.1
-    }
-
-    fn make_entry(
-        name: &str,
-        username: Option<&str>,
-        folder: Option<&str>,
-        uris: &[(&str, Option<rbw::api::UriMatchType>)],
-    ) -> (rbw::db::Entry, DecryptedSearchCipher) {
-        let id = uuid::Uuid::new_v4();
-        (
-            rbw::db::Entry {
-                id: id.to_string(),
-                org_id: None,
-                folder: folder.map(|_| "encrypted folder name".to_string()),
-                folder_id: None,
-                name: "this is the encrypted name".to_string(),
-                data: rbw::db::EntryData::Login {
-                    username: username.map(|_| {
-                        "this is the encrypted username".to_string()
-                    }),
-                    password: None,
-                    uris: uris
-                        .iter()
-                        .map(|(_, match_type)| rbw::db::Uri {
-                            uri: "this is the encrypted uri".to_string(),
-                            match_type: *match_type,
-                        })
-                        .collect(),
-                    totp: None,
-                },
-                fields: vec![],
-                notes: None,
-                history: vec![],
-                key: None,
-                master_password_reprompt: rbw::api::CipherRepromptType::None,
-            },
-            DecryptedSearchCipher {
-                id: id.to_string(),
-                entry_type: "Login".to_string(),
-                folder: folder.map(std::string::ToString::to_string),
-                name: name.to_string(),
-                user: username.map(std::string::ToString::to_string),
-                uris: uris
-                    .iter()
-                    .map(|(uri, match_type)| {
-                        ((*uri).to_string(), *match_type)
-                    })
-                    .collect(),
-                fields: vec![],
-                notes: None,
-            },
-        )
     }
 }
