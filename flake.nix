@@ -3,10 +3,11 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
+    crane.url = "github:ipetkov/crane";
   };
 
   outputs =
-    { self, nixpkgs }:
+    { self, nixpkgs, crane }:
     let
       supportedSystems = [
         "x86_64-linux"
@@ -22,36 +23,37 @@
         let
           pkgs = nixpkgs.legacyPackages.${system};
           inherit (pkgs) lib stdenv;
-        in
-        let
+          craneLib = crane.mkLib pkgs;
+
+          src = lib.cleanSource self;
+
+          commonArgs = {
+            inherit src;
+            pname = "rbw";
+            version = self.shortRev or self.dirtyShortRev or "dev";
+
+            nativeBuildInputs = [
+              pkgs.installShellFiles
+            ] ++ lib.optionals stdenv.hostPlatform.isLinux [ pkgs.pkg-config ];
+
+            buildInputs = [ pkgs.bash ];
+
+            preConfigure = lib.optionalString stdenv.hostPlatform.isLinux ''
+              export OPENSSL_INCLUDE_DIR="${pkgs.openssl.dev}/include"
+              export OPENSSL_LIB_DIR="${lib.getLib pkgs.openssl}/lib"
+            '';
+          };
+
+          cargoArtifacts = craneLib.buildDepsOnly commonArgs;
+
           mkRbw =
             {
               withFzf ? false,
               withRofi ? false,
               withPass ? false,
             }:
-            pkgs.rustPlatform.buildRustPackage rec {
-              pname = "rbw";
-              version = "1.16.0";
-
-              src = pkgs.fetchzip {
-                url = "https://github.com/cmlsharp/rbw/archive/refs/tags/${version}.tar.gz";
-                hash = "sha256-Kr5MGRDJ2ozcl7DW1/RXXie71ZEh53P6wVxt9hVU81s=";
-              };
-
-              cargoHash = "sha256-X8hXlTqqJeXmqlHktmwzsjLiTBaWMgW66EqKR7yOX9U=";
-
-              nativeBuildInputs = [
-                pkgs.installShellFiles
-              ]
-              ++ lib.optionals stdenv.hostPlatform.isLinux [ pkgs.pkg-config ];
-
-              buildInputs = [ pkgs.bash ];
-
-              preConfigure = lib.optionalString stdenv.hostPlatform.isLinux ''
-                export OPENSSL_INCLUDE_DIR="${pkgs.openssl.dev}/include"
-                export OPENSSL_LIB_DIR="${lib.getLib pkgs.openssl}/lib"
-              '';
+            craneLib.buildPackage (commonArgs // {
+              inherit cargoArtifacts;
 
               postInstall = ''
                 install -Dm755 -t $out/bin bin/git-credential-rbw
@@ -86,7 +88,7 @@
                 license = lib.licenses.mit;
                 mainProgram = "rbw";
               };
-            };
+            });
         in
         {
           rbw = mkRbw { };

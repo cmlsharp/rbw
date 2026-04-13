@@ -4,6 +4,7 @@ This is my fork of rbw.
 
 Changelog:
 * Add --full to `rbw add` and `rbw edit` which opens the editor to a YAML file containing the entire vault entry
+* Add a --file flag to both the above subcommands to easily bypass launching the editor
 * Fix a bug whereby `rbw` sent the wrong client version information to Bitwarden resulting in edits getting rejected.
 
 `rbw` README.md below:

@@ -1270,25 +1270,37 @@ impl LoginState {
         })
     }
 
-    fn edit_legacy(mut self) -> anyhow::Result<LoginState> {
-        let mut contents =
-            format!("{}\n", self.password.as_deref().unwrap_or(""));
-        if let Some(notes) = self.notes.as_deref() {
-            write!(contents, "\n{notes}\n").unwrap();
-        }
+    fn edit_legacy(
+        mut self,
+        input_file: Option<&str>,
+    ) -> anyhow::Result<LoginState> {
+        let contents: String = if let Some(file) = input_file {
+            std::fs::read_to_string(file).with_context(|| file.to_string())?
+        } else {
+            let mut contents =
+                format!("{}\n", self.password.as_deref().unwrap_or(""));
+            if let Some(notes) = self.notes.as_deref() {
+                write!(contents, "\n{notes}\n").unwrap();
+            }
+            rbw::edit::edit(&contents, HELP_PW)?
+        };
 
-        let contents = rbw::edit::edit(&contents, HELP_PW)?;
         let (password, notes) = parse_editor(&contents);
         self.password = password;
         self.notes = notes;
         Ok(self)
     }
 
-    fn edit_full(self) -> anyhow::Result<Self> {
-        let contents =
-            rbw::edit::edit(&yaml_serde::to_string(&self)?, HELP_FULL)?;
-        yaml_serde::from_str(&contents)
-            .context("failed to parse full login editor contents")
+    fn edit_full(self, input_file: Option<&str>) -> anyhow::Result<Self> {
+        Ok(if let Some(file) = input_file {
+            let file = std::fs::File::open(file)
+                .with_context(|| file.to_string())?;
+            yaml_serde::from_reader(file)?
+        } else {
+            let contents =
+                rbw::edit::edit(&yaml_serde::to_string(&self)?, HELP_FULL)?;
+            yaml_serde::from_str(&contents)?
+        })
     }
 }
 
@@ -1633,6 +1645,7 @@ pub fn add(
     name: &str,
     username: Option<&str>,
     full: bool,
+    file: Option<&str>,
     uris: &[(String, Option<rbw::api::UriMatchType>)],
     folder: Option<&str>,
 ) -> anyhow::Result<()> {
@@ -1659,9 +1672,9 @@ pub fn add(
         notes: None,
     };
     let login = if full {
-        login.edit_full()
+        login.edit_full(file)
     } else {
-        login.edit_legacy()
+        login.edit_legacy(file)
     }?;
     let notes = encrypt_optional_string(login.notes.as_deref(), None)?;
     let data = login.encrypt(None)?;
@@ -1822,6 +1835,7 @@ pub fn edit(
     username: Option<&str>,
     folder: Option<&str>,
     full: bool,
+    file: Option<&str>,
     ignore_case: bool,
 ) -> anyhow::Result<()> {
     unlock()?;
@@ -1872,9 +1886,9 @@ pub fn edit(
                 notes: decrypted.notes.clone(),
             };
             let login = if full {
-                login.edit_full()
+                login.edit_full(file)
             } else {
-                login.edit_legacy()
+                login.edit_legacy(file)
             }?;
 
             if let Some(entry_password) = entry_password
