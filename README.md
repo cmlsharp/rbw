@@ -6,6 +6,8 @@ Changelog:
 * Add --full to `rbw add` and `rbw edit` which opens the editor to a YAML file containing the entire vault entry
 * Add a --file flag to both the above subcommands to easily bypass launching the editor
 * Fix a bug whereby `rbw` sent the wrong client version information to Bitwarden resulting in edits getting rejected.
+* Significant refactor of `rbw`, factoring out much of its functionality into the `src/client.rs` so that it can be shared with...
+* Added `rbw-tui` a TUI frontend for `rbw`
 
 `rbw` README.md below:
 
