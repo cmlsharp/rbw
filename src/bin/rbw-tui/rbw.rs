@@ -3,8 +3,9 @@ use anyhow::Result;
 use crate::domain::{Entry, EntryDraft};
 
 fn client() -> rbw::client::Client<rbw::client::AgentClient> {
-    let agent =
-        rbw::client::AgentClient::new(rbw::protocol::Environment::from_current());
+    let agent = rbw::client::AgentClient::new(
+        rbw::protocol::Environment::from_current(),
+    );
     rbw::client::Client::new(agent)
 }
 
@@ -48,7 +49,7 @@ pub fn edit_entry(entry_id: &str, draft: &EntryDraft) -> Result<()> {
         .find(|e| e.id == entry_id)
         .ok_or_else(|| anyhow::anyhow!("entry not found"))?;
 
-    c.edit_entry(entry, &draft.to_data(), draft.notes_option())
+    c.edit_entry(entry, &draft.name, &draft.to_data(), draft.notes_option())
 }
 
 /// Copies text to the clipboard via the agent.

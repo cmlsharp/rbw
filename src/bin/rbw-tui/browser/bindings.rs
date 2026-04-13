@@ -12,7 +12,12 @@ pub enum Action {
     SearchClearAndFocus,
     SearchClear,
     SearchBackspace,
+    SearchDeleteWordBack,
     SearchInput(char),
+    SearchLeft,
+    SearchRight,
+    SearchHome,
+    SearchEnd,
     FinishSearch,
     MoveDown,
     MoveUp,
@@ -39,8 +44,9 @@ impl StaticLabel for Action {
             Self::ClearPrefix => "cancel",
             Self::Search => "search",
             Self::SearchClearAndFocus | Self::SearchClear => "clear search",
-            Self::SearchBackspace => "backspace",
+            Self::SearchBackspace | Self::SearchDeleteWordBack => "backspace",
             Self::SearchInput(_) => "type",
+            Self::SearchLeft | Self::SearchRight | Self::SearchHome | Self::SearchEnd => "move",
             Self::FinishSearch => "finish search",
             Self::MoveDown => "down",
             Self::MoveUp => "up",
@@ -100,9 +106,24 @@ const NORMAL_BINDINGS: &[Binding<Action>] = &[
     bind!(ctrl + 'c' => Action::Cancel),
 ];
 
+const SEARCH_BINDINGS: &[Binding<Action>] = &[
+    bind!(esc => Action::FinishSearch),
+    bind!(enter => Action::FinishSearch),
+    bind!(ctrl + backspace => Action::SearchDeleteWordBack),
+    bind!(ctrl + 'u' => Action::SearchClear),
+    bind!(ctrl + 'a' => Action::SearchHome),
+    bind!(ctrl + 'e' => Action::SearchEnd),
+    bind!(left => Action::SearchLeft, repeatable),
+    bind!(right => Action::SearchRight, repeatable),
+];
+
 const FILTER_BINDINGS: &[Binding<Action>] = &[bind!('t' => Action::ToggleFilter, hint)];
 
 const SELECT_BINDINGS: &[Binding<Action>] = &[bind!(enter => Action::Select, hint)];
+
+pub(super) fn search_bindings() -> &'static [Binding<Action>] {
+    SEARCH_BINDINGS
+}
 
 pub(super) fn bindings(
     context: &Context,

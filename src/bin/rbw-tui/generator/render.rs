@@ -20,7 +20,7 @@ fn summary(generator: &State, palette: &Palette) -> Vec<Line<'static>> {
         (
             "Length",
             if generator.editing_length {
-                generator.length_buffer.clone()
+                generator.length_buffer.as_str().to_string()
             } else {
                 generator.settings.length.to_string()
             },
@@ -105,7 +105,7 @@ pub(crate) fn cursor_position(area: Rect, generator: &State) -> (u16, u16) {
     });
     let x = block_inner.x
         + "  Length: ".chars().count() as u16
-        + generator.length_buffer.chars().count() as u16;
+        + generator.length_buffer.cursor_char_offset() as u16;
     let y = block_inner.y + 1;
     (x.min(popup.right().saturating_sub(2)), y)
 }

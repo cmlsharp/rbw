@@ -5,10 +5,11 @@
 mod app;
 mod browser;
 mod config;
-mod form;
 mod domain;
+mod form;
 mod generator;
 mod rbw;
+mod text_input;
 
 use std::{fs, path::PathBuf};
 
@@ -48,8 +49,8 @@ enum CliScope {
 impl From<CliScope> for Scope {
     fn from(value: CliScope) -> Self {
         match value {
-            CliScope::Vault => Scope::Vault,
-            CliScope::Site => Scope::Site,
+            CliScope::Vault => Self::Vault,
+            CliScope::Site => Self::Site,
         }
     }
 }
@@ -57,11 +58,11 @@ impl From<CliScope> for Scope {
 fn main() -> Result<()> {
     let cli = Cli::parse();
     let has_url = !cli.url.is_empty();
-    let scope =
-        cli.scope
-            .map(Into::into)
-            .unwrap_or(if has_url { Scope::Site } else { Scope::Vault });
-    let result = app::run(cli.url, cli.username, scope, cli.output_file.is_some())?;
+    let scope = cli
+        .scope
+        .map_or(if has_url { Scope::Site } else { Scope::Vault }, Into::into);
+    let result =
+        app::run(cli.url, cli.username, scope, cli.output_file.is_some())?;
     if let Some(path) = cli.output_file {
         fs::write(path, result)?;
     }

@@ -1499,6 +1499,7 @@ impl<C: CryptoProvider> Client<C> {
     pub fn edit_entry(
         &self,
         entry: &crate::db::Entry,
+        name: &str,
         data: &crate::decrypted::Data,
         notes: Option<&str>,
     ) -> anyhow::Result<()> {
@@ -1546,6 +1547,7 @@ impl<C: CryptoProvider> Client<C> {
             }
         }
 
+        let encrypted_name = self.crypto.encrypt(name, org_id)?;
         let encrypted_data = self.encrypt_entry_data(data, org_id)?;
         let encrypted_notes =
             self.encrypt_optional_string(notes, org_id)?;
@@ -1555,7 +1557,7 @@ impl<C: CryptoProvider> Client<C> {
             refresh_token,
             &entry.id,
             org_id,
-            &entry.name,
+            &encrypted_name,
             &encrypted_data,
             &entry.fields,
             encrypted_notes.as_deref(),

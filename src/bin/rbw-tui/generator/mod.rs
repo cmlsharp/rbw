@@ -78,20 +78,20 @@ pub(crate) fn reduce_generator(
             Transition::none()
         }
         Action::Backspace => {
-            state.length_buffer.pop();
+            state.length_buffer.backspace();
             if state.length_buffer.is_empty() {
-                state.length_buffer = "0".to_string();
+                state.length_buffer.set("0");
             }
             Transition::none()
         }
         Action::InsertDigit(ch) => {
             if !state.editing_length {
                 state.editing_length = true;
-                state.length_buffer = ch.to_string();
-            } else if state.length_buffer == "0" {
-                state.length_buffer = ch.to_string();
+                state.length_buffer.set(&ch.to_string());
+            } else if state.length_buffer.as_str() == "0" {
+                state.length_buffer.set(&ch.to_string());
             } else {
-                state.length_buffer.push(ch);
+                state.length_buffer.insert(ch);
             }
             Transition::none()
         }

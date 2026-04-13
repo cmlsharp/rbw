@@ -15,7 +15,13 @@ pub enum Action {
     RemoveUri,
     Save,
     Backspace,
+    DeleteWordBack,
+    Delete,
     Insert(char),
+    Left,
+    Right,
+    Home,
+    End,
 }
 
 impl StaticLabel for Action {
@@ -28,8 +34,9 @@ impl StaticLabel for Action {
             Self::AddUri => "add URI",
             Self::RemoveUri => "remove URI",
             Self::Save => "save",
-            Self::Backspace => "backspace",
+            Self::Backspace | Self::DeleteWordBack | Self::Delete => "backspace",
             Self::Insert(_) => "insert",
+            Self::Left | Self::Right | Self::Home | Self::End => "move",
         }
     }
 }
@@ -42,8 +49,10 @@ const CREATE_BINDINGS: &[Binding<Action>] = &[
     bind!(tab => Action::NextField, repeatable, hint),
     bind!(shift + tab => Action::PrevField, repeatable),
     bind!(ctrl + 'g' => Action::GeneratePassword, hint),
-    bind!(ctrl + 'a' => Action::AddUri, hint),
-    bind!(ctrl + 'd' => Action::RemoveUri, hint),
+    bind!(ctrl + 'a' => Action::Home),
+    bind!(ctrl + 'e' => Action::End),
+    bind!(ctrl + 'o' => Action::AddUri, hint),
+    bind!(ctrl + 'x' => Action::RemoveUri, hint),
     bind!(enter => Action::Save, hint),
     bind!(ctrl + 's' => Action::Save),
 ];

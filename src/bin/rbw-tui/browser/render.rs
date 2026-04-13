@@ -195,5 +195,5 @@ pub(crate) fn render(
 
 /// Returns the cursor position for browser search mode.
 pub(crate) fn search_cursor(area: Rect, state: &State) -> (u16, u16) {
-    (area.x + 1 + state.search.chars().count() as u16, area.y + 1)
+    (area.x + 1 + state.search.cursor_char_offset() as u16, area.y + 1)
 }

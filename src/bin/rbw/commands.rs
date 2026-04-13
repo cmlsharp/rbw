@@ -1321,7 +1321,7 @@ pub fn edit(
         }
     };
 
-    client().edit_entry(&entry, &data, notes.as_deref())?;
+    client().edit_entry(&entry, &decrypted.name, &data, notes.as_deref())?;
 
     client().sync()?;
     Ok(())

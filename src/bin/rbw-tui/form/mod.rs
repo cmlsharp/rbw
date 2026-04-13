@@ -18,9 +18,15 @@ use crate::{
 use self::bindings::bindings;
 
 pub(crate) fn map_form_key(key: KeyEvent) -> Vec<app::Action> {
-    lookup_action_with_fallback(&bindings(), key, |key| match key.code {
-        KeyCode::Backspace => Some(Action::Backspace),
-        KeyCode::Char(ch) if key.modifiers.is_empty() || key.modifiers == KeyModifiers::SHIFT => {
+    lookup_action_with_fallback(&bindings(), key, |key| match (key.code, key.modifiers) {
+        (KeyCode::Backspace, KeyModifiers::CONTROL) => Some(Action::DeleteWordBack),
+        (KeyCode::Backspace, _) => Some(Action::Backspace),
+        (KeyCode::Delete, _) => Some(Action::Delete),
+        (KeyCode::Left, _) => Some(Action::Left),
+        (KeyCode::Right, _) => Some(Action::Right),
+        (KeyCode::Home, _) => Some(Action::Home),
+        (KeyCode::End, _) => Some(Action::End),
+        (KeyCode::Char(ch), m) if m.is_empty() || m == KeyModifiers::SHIFT => {
             Some(Action::Insert(ch))
         }
         _ => None,
@@ -62,6 +68,7 @@ pub(crate) fn reduce_form(
             Transition::none()
         }
         Action::Save => {
+            state.sync_draft();
             if state.draft.name.trim().is_empty() {
                 Transition::notify_error("Name is required")
             } else {
@@ -83,8 +90,32 @@ pub(crate) fn reduce_form(
             state.backspace();
             Transition::none()
         }
+        Action::DeleteWordBack => {
+            state.delete_word_back();
+            Transition::none()
+        }
+        Action::Delete => {
+            state.delete();
+            Transition::none()
+        }
         Action::Insert(ch) => {
             state.insert_char(ch);
+            Transition::none()
+        }
+        Action::Left => {
+            state.move_left();
+            Transition::none()
+        }
+        Action::Right => {
+            state.move_right();
+            Transition::none()
+        }
+        Action::Home => {
+            state.move_to_start();
+            Transition::none()
+        }
+        Action::End => {
+            state.move_to_end();
             Transition::none()
         }
     }

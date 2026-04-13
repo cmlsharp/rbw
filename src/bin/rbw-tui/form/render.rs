@@ -98,12 +98,12 @@ fn build_layout(create: &State, width: u16, height: u16) -> LayoutInfo {
         }
 
         if field == create.field {
-            let value_len = displayed_value.chars().count();
-            if value_len <= first_width {
+            let cursor_offset = create.cursor_char_offset();
+            if cursor_offset <= first_width {
                 cursor_line = field_start;
-                cursor_column = (label_width + value_len) as u16;
+                cursor_column = (label_width + cursor_offset) as u16;
             } else {
-                let remaining = value_len - first_width;
+                let remaining = cursor_offset - first_width;
                 let extra_rows = remaining / continuation_width;
                 let extra_cols = remaining % continuation_width;
                 cursor_line = field_start + extra_rows as u16 + 1;

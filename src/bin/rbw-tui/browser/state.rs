@@ -1,6 +1,7 @@
 use crate::{
     app::Context,
     domain::{Entry, EntryExt as _, Scope},
+    text_input::TextInput,
 };
 
 /// Browser/listing state for the main screen.
@@ -14,7 +15,7 @@ pub enum PendingPrefix {
 #[derive(Debug)]
 pub struct State {
     pub scope: Scope,
-    pub search: String,
+    pub search: TextInput,
     pub pending: Option<PendingPrefix>,
     /// The full entry list. Only accessible within the browser module;
     /// external code must use `replace_entries` to ensure `visible` stays in sync.
@@ -32,7 +33,7 @@ impl State {
     pub fn new(scope: Scope, entries: Vec<Entry>) -> Self {
         Self {
             scope,
-            search: String::new(),
+            search: TextInput::new(),
             pending: None,
             entries,
             visible: Vec::new(),
@@ -127,7 +128,7 @@ impl State {
             self.scope,
             &context.url,
             &context.username,
-            &self.search,
+            self.search.as_str(),
         );
         if self.visible.is_empty() {
             self.selected = 0;

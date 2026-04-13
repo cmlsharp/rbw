@@ -12,7 +12,7 @@ pub(crate) use self::{
 };
 
 use crate::{
-    app::{self, Context, Effect, Mode, SystemAction, Transition},
+    app::{self, Context, Effect, Mode, SystemAction, Transition, lookup_action_with_fallback},
     form,
     domain::draft_from_seed,
 };
@@ -41,19 +41,17 @@ pub(crate) fn map_browser_key(state: &app::State, key: KeyEvent) -> Vec<app::Act
 }
 
 pub(crate) fn map_search_key(key: KeyEvent) -> Vec<app::Action> {
-    match (key.code, key.modifiers) {
-        (KeyCode::Esc | KeyCode::Enter, _) => vec![app::Action::Browser(Action::FinishSearch)],
-        (KeyCode::Backspace, KeyModifiers::CONTROL) => {
-            vec![app::Action::Browser(Action::SearchClear)]
+    lookup_action_with_fallback(bindings::search_bindings(), key, |key| match key.code {
+        KeyCode::Backspace => Some(Action::SearchBackspace),
+        KeyCode::Home => Some(Action::SearchHome),
+        KeyCode::End => Some(Action::SearchEnd),
+        KeyCode::Char(ch) if key.modifiers.is_empty() || key.modifiers == KeyModifiers::SHIFT => {
+            Some(Action::SearchInput(ch))
         }
-        (KeyCode::Backspace, _) => vec![app::Action::Browser(Action::SearchBackspace)],
-        (KeyCode::Char(ch), modifiers)
-            if modifiers.is_empty() || modifiers == KeyModifiers::SHIFT =>
-        {
-            vec![app::Action::Browser(Action::SearchInput(ch))]
-        }
-        _ => Vec::new(),
-    }
+        _ => None,
+    })
+    .map(|action| vec![app::Action::Browser(action)])
+    .unwrap_or_default()
 }
 
 pub(crate) fn reduce_browser(
@@ -79,13 +77,34 @@ pub(crate) fn reduce_browser(
             Transition::none()
         }
         Action::SearchBackspace => {
-            state.search.pop();
+            state.search.backspace();
+            state.refresh_visible(context);
+            Transition::none()
+        }
+        Action::SearchDeleteWordBack => {
+            state.search.delete_word_back();
             state.refresh_visible(context);
             Transition::none()
         }
         Action::SearchInput(ch) => {
-            state.search.push(ch);
+            state.search.insert(ch);
             state.refresh_visible(context);
+            Transition::none()
+        }
+        Action::SearchLeft => {
+            state.search.move_left();
+            Transition::none()
+        }
+        Action::SearchRight => {
+            state.search.move_right();
+            Transition::none()
+        }
+        Action::SearchHome => {
+            state.search.move_to_start();
+            Transition::none()
+        }
+        Action::SearchEnd => {
+            state.search.move_to_end();
             Transition::none()
         }
         Action::FinishSearch => Transition::mode(Mode::Normal),

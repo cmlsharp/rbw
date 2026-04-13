@@ -1,5 +1,6 @@
 use crate::config::AppConfig;
 use crate::form;
+use crate::text_input::TextInput;
 
 pub const GENERATOR_MODES: [&str; 4] = ["standard", "no-symbols", "diceware", "numeric"];
 
@@ -17,7 +18,7 @@ pub struct State {
     pub settings: Settings,
     pub selected_index: usize,
     pub editing_length: bool,
-    pub length_buffer: String,
+    pub length_buffer: TextInput,
     pub length_touched: bool,
     pub return_to_form: Option<form::State>,
 }
@@ -25,7 +26,7 @@ pub struct State {
 impl State {
     /// Starts a fresh generator state from the persisted generator settings.
     pub fn from_settings(settings: Settings) -> Self {
-        let length_buffer = settings.length.to_string();
+        let length_buffer = TextInput::from_str(&settings.length.to_string());
         Self {
             settings,
             selected_index: 0,
@@ -81,7 +82,7 @@ impl State {
             self.settings.mode = GENERATOR_MODES[next].to_string();
             if !self.length_touched {
                 self.settings.length = Self::default_length(&self.settings.mode);
-                self.length_buffer = self.settings.length.to_string();
+                self.length_buffer.set(&self.settings.length.to_string());
             }
         } else if self.selected_index == 2 {
             self.settings.nonconfusables = !self.settings.nonconfusables;
@@ -93,19 +94,20 @@ impl State {
         self.length_touched = true;
         let current = self.settings.length as i32;
         self.settings.length = (current + delta).clamp(4, 128) as u32;
-        self.length_buffer = self.settings.length.to_string();
+        self.length_buffer.set(&self.settings.length.to_string());
     }
 
     /// Commits the current inline length buffer into generator settings.
     pub fn commit_length(&mut self) {
         let parsed = self
             .length_buffer
+            .as_str()
             .parse::<u32>()
             .ok()
             .unwrap_or(self.settings.length);
         self.length_touched = true;
         self.settings.length = parsed.clamp(4, 128);
-        self.length_buffer = self.settings.length.to_string();
+        self.length_buffer.set(&self.settings.length.to_string());
         self.editing_length = false;
     }
 }
