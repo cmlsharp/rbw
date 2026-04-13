@@ -46,7 +46,10 @@ impl StaticLabel for Action {
             Self::SearchClearAndFocus | Self::SearchClear => "clear search",
             Self::SearchBackspace | Self::SearchDeleteWordBack => "backspace",
             Self::SearchInput(_) => "type",
-            Self::SearchLeft | Self::SearchRight | Self::SearchHome | Self::SearchEnd => "move",
+            Self::SearchLeft
+            | Self::SearchRight
+            | Self::SearchHome
+            | Self::SearchEnd => "move",
             Self::FinishSearch => "finish search",
             Self::MoveDown => "down",
             Self::MoveUp => "up",
@@ -117,9 +120,11 @@ const SEARCH_BINDINGS: &[Binding<Action>] = &[
     bind!(right => Action::SearchRight, repeatable),
 ];
 
-const FILTER_BINDINGS: &[Binding<Action>] = &[bind!('t' => Action::ToggleFilter, hint)];
+const FILTER_BINDINGS: &[Binding<Action>] =
+    &[bind!('t' => Action::ToggleFilter, hint)];
 
-const SELECT_BINDINGS: &[Binding<Action>] = &[bind!(enter => Action::Select, hint)];
+const SELECT_BINDINGS: &[Binding<Action>] =
+    &[bind!(enter => Action::Select, hint)];
 
 pub(super) fn search_bindings() -> &'static [Binding<Action>] {
     SEARCH_BINDINGS

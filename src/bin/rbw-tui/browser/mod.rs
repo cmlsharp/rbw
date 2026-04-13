@@ -12,15 +12,23 @@ pub use self::{
 };
 
 use crate::{
-    app::{self, Context, Effect, Mode, SystemAction, Transition, lookup_action_with_fallback},
-    form,
+    app::{
+        self, Context, Effect, Mode, SystemAction, Transition,
+        lookup_action_with_fallback,
+    },
     domain::draft_from_seed,
+    form,
 };
 
 use self::bindings::bindings;
 
-pub fn map_browser_key(state: &app::State, key: KeyEvent) -> Vec<app::Action> {
-    if let Some(binding) = bindings(&state.context, &state.browser).find(|b| b.matches(key)) {
+pub fn map_browser_key(
+    state: &app::State,
+    key: KeyEvent,
+) -> Vec<app::Action> {
+    if let Some(binding) =
+        bindings(&state.context, &state.browser).find(|b| b.matches(key))
+    {
         let action = binding.action();
         return vec![if matches!(action, Action::Cancel) {
             app::Action::System(SystemAction::Quit)
@@ -41,14 +49,19 @@ pub fn map_browser_key(state: &app::State, key: KeyEvent) -> Vec<app::Action> {
 }
 
 pub fn map_search_key(key: KeyEvent) -> Vec<app::Action> {
-    lookup_action_with_fallback(bindings::search_bindings(), key, |key| match key.code {
-        KeyCode::Backspace => Some(Action::SearchBackspace),
-        KeyCode::Home => Some(Action::SearchHome),
-        KeyCode::End => Some(Action::SearchEnd),
-        KeyCode::Char(ch) if key.modifiers.is_empty() || key.modifiers == KeyModifiers::SHIFT => {
-            Some(Action::SearchInput(ch))
+    lookup_action_with_fallback(bindings::search_bindings(), key, |key| {
+        match key.code {
+            KeyCode::Backspace => Some(Action::SearchBackspace),
+            KeyCode::Home => Some(Action::SearchHome),
+            KeyCode::End => Some(Action::SearchEnd),
+            KeyCode::Char(ch)
+                if key.modifiers.is_empty()
+                    || key.modifiers == KeyModifiers::SHIFT =>
+            {
+                Some(Action::SearchInput(ch))
+            }
+            _ => None,
         }
-        _ => None,
     })
     .map(|action| vec![app::Action::Browser(action)])
     .unwrap_or_default()
@@ -183,15 +196,23 @@ pub fn reduce_browser(
         }
         Action::Edit => {
             state.clear_prefixes();
-            state
-                .selected_entry()
-                .cloned().map_or_else(Transition::none, |entry| Transition::mode(Mode::Form(form::State::new_edit(&entry))))
+            state.selected_entry().cloned().map_or_else(
+                Transition::none,
+                |entry| {
+                    Transition::mode(Mode::Form(form::State::new_edit(
+                        &entry,
+                    )))
+                },
+            )
         }
         Action::Delete => {
             state.clear_prefixes();
             state
                 .selected_entry()
-                .cloned().map_or_else(Transition::none, |entry| Transition::mode(Mode::DeleteConfirm(entry)))
+                .cloned()
+                .map_or_else(Transition::none, |entry| {
+                    Transition::mode(Mode::DeleteConfirm(entry))
+                })
         }
     }
 }
