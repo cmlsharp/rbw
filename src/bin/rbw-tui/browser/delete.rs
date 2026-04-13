@@ -37,25 +37,25 @@ const BINDINGS: &[Binding<Action>] = &[
     bind!('n' => Action::Cancel, hint),
 ];
 
-pub(crate) fn key_map(key: KeyEvent) -> Vec<app::Action> {
+pub fn key_map(key: KeyEvent) -> Vec<app::Action> {
     lookup_action(BINDINGS, key)
         .map(|action| vec![app::Action::Delete(action)])
         .unwrap_or_default()
 }
 
-pub(crate) fn reduce(entry: Option<&Entry>, action: Action) -> Transition {
+pub fn reduce(entry: Option<&Entry>, action: Action) -> Transition {
     match action {
         Action::Cancel => Transition::mode(Mode::Normal),
         Action::Confirm => {
             let Some(entry) = entry else {
                 return Transition::none();
             };
-            Transition::effect(Effect::delete_entry(&entry))
+            Transition::effect(Effect::delete_entry(entry))
         }
     }
 }
 
-pub(crate) fn render_confirm(
+pub fn render_confirm(
     frame: &mut ratatui::Frame<'_>,
     palette: &Palette,
     entry: &crate::domain::Entry,
@@ -67,7 +67,7 @@ pub(crate) fn render_confirm(
             "Delete '{}'{}?",
             entry.name,
             if username.is_empty() {
-                "".to_string()
+                String::new()
             } else {
                 format!(" ({username})")
             }

@@ -1,10 +1,10 @@
 mod bindings;
 mod render;
-pub(crate) mod state;
+pub mod state;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-pub(crate) use self::{
+pub use self::{
     bindings::Action,
     render::{cursor_position, render_modal},
     state::State,
@@ -17,8 +17,8 @@ use crate::{
 
 use self::bindings::bindings;
 
-pub(crate) fn map_form_key(key: KeyEvent) -> Vec<app::Action> {
-    lookup_action_with_fallback(&bindings(), key, |key| match (key.code, key.modifiers) {
+pub fn map_form_key(key: KeyEvent) -> Vec<app::Action> {
+    lookup_action_with_fallback(bindings(), key, |key| match (key.code, key.modifiers) {
         (KeyCode::Backspace, KeyModifiers::CONTROL) => Some(Action::DeleteWordBack),
         (KeyCode::Backspace, _) => Some(Action::Backspace),
         (KeyCode::Delete, _) => Some(Action::Delete),
@@ -35,7 +35,7 @@ pub(crate) fn map_form_key(key: KeyEvent) -> Vec<app::Action> {
     .unwrap_or_default()
 }
 
-pub(crate) fn reduce_form(
+pub fn reduce_form(
     state: &mut State,
     generator_settings: &generator::Settings,
     action: Action,

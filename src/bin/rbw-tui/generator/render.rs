@@ -77,7 +77,7 @@ fn help_text(state: &State) -> &'static str {
     }
 }
 
-pub(crate) fn render_modal(frame: &mut ratatui::Frame<'_>, palette: &Palette, generator: &State) {
+pub fn render_modal(frame: &mut ratatui::Frame<'_>, palette: &Palette, generator: &State) {
     let inner = crate::app::render_popup_shell(frame, 60, 11, "Generate Password", palette.accent);
     let rows = Layout::default()
         .direction(Direction::Vertical)
@@ -97,7 +97,7 @@ pub(crate) fn render_modal(frame: &mut ratatui::Frame<'_>, palette: &Palette, ge
 }
 
 /// Returns the cursor position while editing generator length.
-pub(crate) fn cursor_position(area: Rect, generator: &State) -> (u16, u16) {
+pub fn cursor_position(area: Rect, generator: &State) -> (u16, u16) {
     let popup = crate::app::popup_area(area, 60, 11);
     let block_inner = popup.inner(Margin {
         vertical: 1,

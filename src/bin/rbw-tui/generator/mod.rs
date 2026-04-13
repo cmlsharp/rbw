@@ -4,19 +4,23 @@ mod state;
 
 use crossterm::event::{KeyCode, KeyEvent};
 
-pub(crate) use self::{
+pub use self::{
     bindings::Action,
     render::{cursor_position, render_modal},
     state::{Settings, State},
 };
 
-use crate::app::{self, Effect, Mode, Transition, lookup_action_with_fallback};
+use crate::app::{
+    self, Effect, Mode, Transition, lookup_action_with_fallback,
+};
 
-pub(crate) fn map_generator_key(state: &State, key: KeyEvent) -> Vec<app::Action> {
+pub fn map_generator_key(state: &State, key: KeyEvent) -> Vec<app::Action> {
     lookup_action_with_fallback(bindings::bindings(state), key, |key| {
         if state.selected_index == 1 {
             match key.code {
-                KeyCode::Char(ch) if ch.is_ascii_digit() => Some(Action::InsertDigit(ch)),
+                KeyCode::Char(ch) if ch.is_ascii_digit() => {
+                    Some(Action::InsertDigit(ch))
+                }
                 _ => None,
             }
         } else {
@@ -27,7 +31,7 @@ pub(crate) fn map_generator_key(state: &State, key: KeyEvent) -> Vec<app::Action
     .unwrap_or_default()
 }
 
-pub(crate) fn reduce_generator(
+pub fn reduce_generator(
     state: &mut State,
     generator_settings: &mut Settings,
     action: Action,
@@ -38,11 +42,10 @@ pub(crate) fn reduce_generator(
                 state.commit_length();
                 return Transition::none();
             }
-            if let Some(form_state) = state.return_to_form.clone() {
-                Transition::mode(Mode::Form(form_state))
-            } else {
-                Transition::mode(Mode::Normal)
-            }
+            state.return_to_form.clone().map_or_else(
+                || Transition::mode(Mode::Normal),
+                |form_state| Transition::mode(Mode::Form(form_state)),
+            )
         }
         Action::Down => {
             state.move_down();

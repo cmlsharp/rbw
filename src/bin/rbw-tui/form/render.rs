@@ -127,7 +127,7 @@ fn build_layout(create: &State, width: u16, height: u16) -> LayoutInfo {
     }
 }
 
-pub(crate) fn render_modal(frame: &mut ratatui::Frame<'_>, palette: &Palette, create: &State) {
+pub fn render_modal(frame: &mut ratatui::Frame<'_>, palette: &Palette, create: &State) {
     let inner =
         crate::app::render_popup_shell(frame, 76, 18, create.title(), palette.accent);
     let rows = Layout::default()
@@ -172,7 +172,7 @@ pub(crate) fn render_modal(frame: &mut ratatui::Frame<'_>, palette: &Palette, cr
 }
 
 /// Returns the cursor position for the current create field.
-pub(crate) fn cursor_position(area: Rect, create: &State) -> (u16, u16) {
+pub fn cursor_position(area: Rect, create: &State) -> (u16, u16) {
     let popup = crate::app::popup_area(area, 76, 18);
     let inner = crate::app::popup_inner_area(popup);
     let content_height = inner.height.saturating_sub(2);

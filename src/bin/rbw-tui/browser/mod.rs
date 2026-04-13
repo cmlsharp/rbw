@@ -1,11 +1,11 @@
 mod bindings;
-pub(crate) mod delete;
+pub mod delete;
 mod render;
 mod state;
 
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 
-pub(crate) use self::{
+pub use self::{
     bindings::Action,
     render::{render, search_cursor},
     state::{PendingPrefix, State, site_targets},
@@ -19,7 +19,7 @@ use crate::{
 
 use self::bindings::bindings;
 
-pub(crate) fn map_browser_key(state: &app::State, key: KeyEvent) -> Vec<app::Action> {
+pub fn map_browser_key(state: &app::State, key: KeyEvent) -> Vec<app::Action> {
     if let Some(binding) = bindings(&state.context, &state.browser).find(|b| b.matches(key)) {
         let action = binding.action();
         return vec![if matches!(action, Action::Cancel) {
@@ -40,7 +40,7 @@ pub(crate) fn map_browser_key(state: &app::State, key: KeyEvent) -> Vec<app::Act
     }
 }
 
-pub(crate) fn map_search_key(key: KeyEvent) -> Vec<app::Action> {
+pub fn map_search_key(key: KeyEvent) -> Vec<app::Action> {
     lookup_action_with_fallback(bindings::search_bindings(), key, |key| match key.code {
         KeyCode::Backspace => Some(Action::SearchBackspace),
         KeyCode::Home => Some(Action::SearchHome),
@@ -54,7 +54,7 @@ pub(crate) fn map_search_key(key: KeyEvent) -> Vec<app::Action> {
     .unwrap_or_default()
 }
 
-pub(crate) fn reduce_browser(
+pub fn reduce_browser(
     state: &mut State,
     context: &Context,
     action: Action,
@@ -185,17 +185,13 @@ pub(crate) fn reduce_browser(
             state.clear_prefixes();
             state
                 .selected_entry()
-                .cloned()
-                .map(|entry| Transition::mode(Mode::Form(form::State::new_edit(&entry))))
-                .unwrap_or_else(Transition::none)
+                .cloned().map_or_else(Transition::none, |entry| Transition::mode(Mode::Form(form::State::new_edit(&entry))))
         }
         Action::Delete => {
             state.clear_prefixes();
             state
                 .selected_entry()
-                .cloned()
-                .map(|entry| Transition::mode(Mode::DeleteConfirm(entry)))
-                .unwrap_or_else(Transition::none)
+                .cloned().map_or_else(Transition::none, |entry| Transition::mode(Mode::DeleteConfirm(entry)))
         }
     }
 }

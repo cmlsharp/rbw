@@ -5,14 +5,14 @@ use serde::Deserialize;
 
 /// Optional YAML configuration file contents.
 #[derive(Debug, Clone, Default, Deserialize)]
-pub(super) struct AppConfig {
+pub struct AppConfig {
     pub generator: Option<GeneratorConfig>,
     pub palette: Option<PaletteConfig>,
 }
 
 /// Generator-specific config overrides.
 #[derive(Debug, Clone, Default, Deserialize)]
-pub(super) struct GeneratorConfig {
+pub struct GeneratorConfig {
     pub length: Option<u32>,
     pub mode: Option<String>,
     pub nonconfusables: Option<bool>,
@@ -20,7 +20,7 @@ pub(super) struct GeneratorConfig {
 
 /// User-overridable color palette values.
 #[derive(Debug, Clone, Default, Deserialize)]
-pub(super) struct PaletteConfig {
+pub struct PaletteConfig {
     pub border: Option<String>,
     pub text: Option<String>,
     pub muted: Option<String>,
@@ -33,7 +33,7 @@ pub(super) struct PaletteConfig {
 
 /// Effective palette used by the UI after applying config overrides.
 #[derive(Debug, Clone)]
-pub(super) struct Palette {
+pub struct Palette {
     pub border: Color,
     pub text: Color,
     pub muted: Color,
@@ -53,7 +53,7 @@ impl AppConfig {
             Ok(text) => text,
             Err(_) => return (Self::default(), None),
         };
-        match yaml_serde::from_str::<AppConfig>(&text) {
+        match yaml_serde::from_str::<Self>(&text) {
             Ok(config) => (config, None),
             Err(err) => (Self::default(), Some(format!("Config parse error: {err}"))),
         }
@@ -61,14 +61,10 @@ impl AppConfig {
 }
 
 fn config_home() -> PathBuf {
-    env::var_os("XDG_CONFIG_HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| {
-            env::var_os("HOME")
-                .map(PathBuf::from)
-                .unwrap_or_else(|| PathBuf::from("."))
+    env::var_os("XDG_CONFIG_HOME").map_or_else(|| {
+            env::var_os("HOME").map_or_else(|| PathBuf::from("."), PathBuf::from)
                 .join(".config")
-        })
+        }, PathBuf::from)
 }
 
 fn parse_hex_color(value: &str) -> Option<Color> {
@@ -116,7 +112,7 @@ impl Default for Palette {
 impl Palette {
     /// Builds the effective palette by overlaying config values onto the defaults.
     pub fn from_config(config: &AppConfig) -> Self {
-        let mut palette = Palette::default();
+        let mut palette = Self::default();
         if let Some(custom) = &config.palette {
             apply_color(&mut palette.border, &custom.border);
             apply_color(&mut palette.text, &custom.text);

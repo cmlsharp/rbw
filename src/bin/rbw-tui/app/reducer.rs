@@ -3,7 +3,7 @@ use crate::{browser, form, domain::EntryExt as _, generator};
 use super::{Effect, EffectOutcome, EffectResult, Mode, State};
 
 /// High-level event routed by screen before it reaches a reducer.
-pub(crate) enum Action {
+pub enum Action {
     System(SystemAction),
     Browser(browser::Action),
     Form(form::Action),
@@ -12,20 +12,20 @@ pub(crate) enum Action {
 }
 
 /// App-level events that are not owned by one screen.
-pub(crate) enum SystemAction {
+pub enum SystemAction {
     Quit,
     Effect(EffectResult),
 }
 
 /// One reducer step result.
-pub(crate) struct Transition {
+pub struct Transition {
     mode: Option<Mode>,
     notification: Option<NotificationSpec>,
     pub effect: Option<Effect>,
     pub output: Option<String>,
 }
 
-pub(crate) struct NotificationSpec {
+pub struct NotificationSpec {
     message: String,
     is_error: bool,
 }

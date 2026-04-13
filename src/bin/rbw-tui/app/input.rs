@@ -4,7 +4,7 @@ use super::reducer::Action;
 use super::{Mode, State};
 use crate::{browser, form, generator};
 
-pub(crate) trait StaticLabel {
+pub trait StaticLabel {
     fn label(&self) -> &'static str;
 }
 
@@ -169,7 +169,7 @@ macro_rules! bind {
 
 /// One concrete key binding plus its optional footer hint metadata.
 #[derive(Clone, Copy)]
-pub(crate) struct Binding<A> {
+pub struct Binding<A> {
     code: KeyCode,
     modifiers: KeyModifiers,
     repeatable: bool,
@@ -243,7 +243,7 @@ impl<A> Binding<A> {
 }
 
 /// Looks up the action bound to a key event, allowing repeat events for repeatable bindings.
-pub(crate) fn lookup_action<A: Copy>(bindings: &[Binding<A>], key: KeyEvent) -> Option<A> {
+pub fn lookup_action<A: Copy>(bindings: &[Binding<A>], key: KeyEvent) -> Option<A> {
     // there aren't really enough binidngs to justify a more complicated data structure, but we
     // could replace this with a map later
     bindings
@@ -253,7 +253,7 @@ pub(crate) fn lookup_action<A: Copy>(bindings: &[Binding<A>], key: KeyEvent) -> 
 }
 
 /// Looks up a binding first, then falls back to mode-specific text input handling.
-pub(crate) fn lookup_action_with_fallback<A: Copy>(
+pub fn lookup_action_with_fallback<A: Copy>(
     bindings: &[Binding<A>],
     key: KeyEvent,
     fallback: impl FnOnce(KeyEvent) -> Option<A>,

@@ -104,13 +104,13 @@ pub enum Scope {
 impl Scope {
     /// Toggles between vault-wide and site-only filtering.
     pub fn toggle(self, has_url: bool) -> Self {
-        if !has_url {
-            Self::Vault
-        } else {
+        if has_url {
             match self {
                 Self::Vault => Self::Site,
                 Self::Site => Self::Vault,
             }
+        } else {
+            Self::Vault
         }
     }
 }

@@ -231,10 +231,9 @@ fn contains_case_insensitive(value: &str, needle: &str) -> bool {
 }
 
 /// Extracts the normalized host portion from a URL-like string.
-pub(crate) fn host_from_url(url: &str) -> String {
+pub fn host_from_url(url: &str) -> String {
     url.split_once("://")
-        .map(|(_, rest)| rest)
-        .unwrap_or(url)
+        .map_or(url, |(_, rest)| rest)
         .split('/')
         .next()
         .unwrap_or(url)
@@ -249,7 +248,7 @@ pub(crate) fn host_from_url(url: &str) -> String {
 }
 
 /// Builds site-matching targets from the current page URL.
-pub(crate) fn site_targets(url: &str) -> Vec<String> {
+pub fn site_targets(url: &str) -> Vec<String> {
     let host = host_from_url(url);
     if host.is_empty() {
         return Vec::new();

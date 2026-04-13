@@ -2,7 +2,8 @@ use crate::config::AppConfig;
 use crate::form;
 use crate::text_input::TextInput;
 
-pub const GENERATOR_MODES: [&str; 4] = ["standard", "no-symbols", "diceware", "numeric"];
+pub const GENERATOR_MODES: [&str; 4] =
+    ["standard", "no-symbols", "diceware", "numeric"];
 
 /// Effective generator defaults and current generator values.
 #[derive(Debug, Clone)]
@@ -81,7 +82,8 @@ impl State {
             let next = (current + 1) % GENERATOR_MODES.len();
             self.settings.mode = GENERATOR_MODES[next].to_string();
             if !self.length_touched {
-                self.settings.length = Self::default_length(&self.settings.mode);
+                self.settings.length =
+                    Self::default_length(&self.settings.mode);
                 self.length_buffer.set(&self.settings.length.to_string());
             }
         } else if self.selected_index == 2 {
@@ -92,7 +94,7 @@ impl State {
     /// Adjusts the length field by one step.
     pub fn adjust_length(&mut self, delta: i32) {
         self.length_touched = true;
-        let current = self.settings.length as i32;
+        let current = i32::try_from(self.settings.length).unwrap();
         self.settings.length = (current + delta).clamp(4, 128) as u32;
         self.length_buffer.set(&self.settings.length.to_string());
     }
@@ -137,7 +139,7 @@ impl Settings {
                 defaults.length = length;
             }
             if let Some(mode) = &generator.mode {
-                defaults.mode = mode.clone();
+                defaults.mode.clone_from(mode);
             }
             if let Some(nonconfusables) = generator.nonconfusables {
                 defaults.nonconfusables = nonconfusables;

@@ -55,12 +55,12 @@ fn entry_summary_lines(state: &State) -> Text<'static> {
 }
 
 /// Computes the number of visible table rows for the entry list viewport.
-pub(crate) fn viewport_rows(area: Rect) -> usize {
+pub fn viewport_rows(area: Rect) -> usize {
     area.height.saturating_sub(3) as usize
 }
 
 /// Renders the main split view with entries, details, and footer hints.
-pub(crate) fn render(
+pub fn render(
     frame: &mut ratatui::Frame<'_>,
     state: &State,
     context: &Context,
@@ -194,6 +194,6 @@ pub(crate) fn render(
 }
 
 /// Returns the cursor position for browser search mode.
-pub(crate) fn search_cursor(area: Rect, state: &State) -> (u16, u16) {
+pub fn search_cursor(area: Rect, state: &State) -> (u16, u16) {
     (area.x + 1 + state.search.cursor_char_offset() as u16, area.y + 1)
 }

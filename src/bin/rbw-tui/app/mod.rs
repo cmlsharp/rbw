@@ -33,7 +33,7 @@ mod reducer;
 
 use self::{input::map_key_to_actions, reducer::reduce};
 
-pub(crate) use self::{
+pub use self::{
     effects::{Effect, EffectOutcome, EffectResult},
     input::{
         Binding, StaticLabel, lookup_action, lookup_action_with_fallback,
@@ -47,7 +47,7 @@ use ratatui::{
 };
 
 /// Renders one hint line with colored bindings and labels.
-pub(crate) fn hint_line<'a, A: StaticLabel + 'a>(
+pub fn hint_line<'a, A: StaticLabel + 'a>(
     bindings: impl IntoIterator<Item = &'a Binding<A>>,
     palette: &Palette,
 ) -> Line<'static> {
@@ -216,7 +216,7 @@ impl State {
 }
 
 /// Centers a popup rectangle within a terminal area.
-pub(crate) fn popup_area(area: Rect, width: u16, height: u16) -> Rect {
+pub fn popup_area(area: Rect, width: u16, height: u16) -> Rect {
     let vertical = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
@@ -237,7 +237,7 @@ pub(crate) fn popup_area(area: Rect, width: u16, height: u16) -> Rect {
 }
 
 /// Returns the standard inner content area for modal popups.
-pub(crate) fn popup_inner_area(area: Rect) -> Rect {
+pub fn popup_inner_area(area: Rect) -> Rect {
     area.inner(Margin {
         vertical: 1,
         horizontal: 1,
@@ -249,7 +249,7 @@ pub(crate) fn popup_inner_area(area: Rect) -> Rect {
 }
 
 /// Renders the standard popup shell and returns the inner content area.
-pub(crate) fn render_popup_shell(
+pub fn render_popup_shell(
     frame: &mut ratatui::Frame<'_>,
     width: u16,
     height: u16,
@@ -333,7 +333,7 @@ fn render(
                 generator,
             ),
             Mode::Form(form_state) => {
-                form::render_modal(frame, &state.context.palette, form_state)
+                form::render_modal(frame, &state.context.palette, form_state);
             }
             Mode::DeleteConfirm(entry) => browser::delete::render_confirm(
                 frame,

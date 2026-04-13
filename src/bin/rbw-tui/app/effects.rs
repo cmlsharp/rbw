@@ -6,7 +6,7 @@ use crate::{
 };
 
 /// Side effect requested by one reducer step.
-pub(crate) enum Effect {
+pub enum Effect {
     SyncVault,
     CopyTarget {
         value: String,
@@ -42,7 +42,7 @@ impl Effect {
     pub(crate) fn copy_target(
         entry: &Entry,
         target: YankTarget,
-    ) -> Effect {
+    ) -> Self {
         use YankTarget as Y;
         let value = match target {
             Y::Name => entry.name.clone(),
@@ -51,7 +51,7 @@ impl Effect {
             Y::Uri => entry
                 .uri_strings()
                 .first()
-                .map(|u| u.to_string())
+                .map(std::string::ToString::to_string)
                 .unwrap_or_default(),
             Y::Username => entry.username().to_string(),
             Y::Password => entry.password().to_string(),
@@ -69,7 +69,7 @@ impl Effect {
 }
 
 /// Successful output produced by one executed side effect.
-pub(crate) enum EffectOutcome {
+pub enum EffectOutcome {
     Synced(Vec<Entry>),
     Copied(&'static str),
     SelectionReady(String),
@@ -90,7 +90,7 @@ pub(crate) enum EffectOutcome {
     },
 }
 
-pub(crate) type EffectResult = Result<EffectOutcome, String>;
+pub type EffectResult = Result<EffectOutcome, String>;
 
 fn to_selection_json(entry: &Entry) -> Result<String, String> {
     #[derive(serde::Serialize)]

@@ -64,13 +64,21 @@ impl State {
 
     /// Starts an edit session from an existing decrypted entry.
     pub fn new_edit(entry: &Entry) -> Self {
-        let uris = entry.uri_strings().into_iter().map(str::to_string).collect::<Vec<_>>();
+        let uris = entry
+            .uri_strings()
+            .into_iter()
+            .map(str::to_string)
+            .collect::<Vec<_>>();
         let draft = EntryDraft {
             name: entry.name.clone(),
             username: entry.username().to_string(),
             password: entry.password().to_string(),
             totp: entry.totp().unwrap_or_default().to_string(),
-            uris: if uris.is_empty() { vec![String::new()] } else { uris },
+            uris: if uris.is_empty() {
+                vec![String::new()]
+            } else {
+                uris
+            },
             folder: entry.folder_str().to_string(),
             notes: entry.notes_str().to_string(),
             org_id: None,
@@ -78,7 +86,9 @@ impl State {
         let input = TextInput::from_str(&draft.name);
         Self {
             draft,
-            purpose: Purpose::Edit { entry_id: entry.id.clone() },
+            purpose: Purpose::Edit {
+                entry_id: entry.id.clone(),
+            },
             field: Field::Name,
             show_password: false,
             replace_on_input: true,
@@ -108,7 +118,11 @@ impl State {
             Field::Name => &self.draft.name,
             Field::Username => &self.draft.username,
             Field::Password => &self.draft.password,
-            Field::Uri(i) => self.draft.uris.get(i).map(|s| s.as_str()).unwrap_or(""),
+            Field::Uri(i) => self
+                .draft
+                .uris
+                .get(i)
+                .map_or("", std::string::String::as_str),
             Field::Folder => &self.draft.folder,
             Field::Notes => &self.draft.notes,
         }
@@ -203,7 +217,8 @@ impl State {
                 self.draft.uris.remove(i);
                 let new_count = self.draft.uris.len();
                 self.field = Field::Uri(i.min(new_count - 1));
-                self.input = TextInput::from_str(self.draft_field(self.field));
+                self.input =
+                    TextInput::from_str(self.draft_field(self.field));
                 self.replace_on_input = true;
             }
         }

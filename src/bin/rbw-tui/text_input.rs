@@ -29,7 +29,7 @@ impl TextInput {
         self.text.is_empty()
     }
 
-    /// Character offset of the cursor (0 = before first char, char_count = after last).
+    /// Character offset of the cursor (0 = before first char, `char_count` = after last).
     pub fn cursor_char_offset(&self) -> usize {
         self.text[..self.cursor].chars().count()
     }
